@@ -2,6 +2,8 @@
 
 **DeltaSpace** is a _lightweight, zero crate dependency_ **filesystem snapshot and diff explorer** tool for Linux.
 
+![DeltaSpace Screenshot](.github/screenshot.png)
+
 ## Features
 
 - Scan filesystem and save a snapshot
