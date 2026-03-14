@@ -1,0 +1,18 @@
+# Documentation at https://nfpm.goreleaser.com
+name: "deltaspace"
+arch: "amd64"
+platform: "linux"
+version: "0.1.0"
+section: "default"
+priority: "extra"
+depends:
+  - coreutils
+maintainer: "Jarmoco"
+description: |
+  DeltaSpace is a filesystem diff tool.
+vendor: "Jarmoco"
+homepage: "https://github.com/Jarmoco/deltaspace"
+license: "MIT"
+contents:
+  - src: ./target/release/deltaspace
+    dst: /usr/bin/deltaspace

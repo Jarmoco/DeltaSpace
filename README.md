@@ -36,3 +36,13 @@ for help, run:
 
 Tested on my system, it created a snapshot of ~127k directories in 6.5s.
 Compilation time is around <2s due to the absence of dependencies.
+
+## Building
+
+To build the code you need to have `cargo` and `nfpm` installed. Then run:
+
+```bash
+./build.sh
+```
+
+This will create the packages in the `dist/` directory.
