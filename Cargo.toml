@@ -13,8 +13,3 @@ opt-level = "z"
 codegen-units = 1
 panic = "abort"
 lto = true
-
-# The profile that 'dist' will build with
-[profile.dist]
-inherits = "release"
-lto = "thin"

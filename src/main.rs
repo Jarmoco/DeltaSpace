@@ -48,12 +48,31 @@ fn interactive_menu() {
             "2" => {
                 terminal::clear();
                 let files = snapshot::cmd_list(false);
+
                 if files.len() < 2 {
                     println!("Need ≥ 2 snapshots in {}.", constants::get_output_dir());
                     utils::pause();
                     continue;
                 }
+                let mut last_day = String::new();
+
                 for (i, f) in files.iter().enumerate() {
+                    let day = Path::new(f)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .split('_')
+                        .nth(1)
+                        .unwrap_or("")
+                        .split("-")
+                        .nth(2)
+                        .unwrap_or("");
+
+                    if day != last_day {
+                        println!();
+                        last_day = day.to_string();
+                    }
+                    
                     println!(
                         "  [{}] {}",
                         i,
@@ -63,6 +82,7 @@ fn interactive_menu() {
                             .unwrap_or_default()
                     );
                 }
+                println!("\n  (Baseline index is automatically set to the smaller index)");
                 print!("\n  Baseline index : ");
                 let _ = std::io::stdout().flush();
                 let a = utils::read_usize_line();
@@ -71,7 +91,9 @@ fn interactive_menu() {
                 let b = utils::read_usize_line();
                 match (a, b) {
                     (Some(ai), Some(bi)) if ai < files.len() && bi < files.len() => {
-                        explore::cmd_explore(ai, bi);
+                        // Ensure the baseline index is less than the comparison index
+                        let (base_idx, comp_idx) = if ai < bi { (ai, bi) } else { (bi, ai) };
+                        explore::cmd_explore(base_idx, comp_idx);
                     }
                     _ => {
                         println!("Invalid.");
@@ -138,7 +160,9 @@ fn main() {
             let b: usize = args[3]
                 .parse()
                 .unwrap_or_else(|_| utils::die("new_idx must be an integer", 2));
-            explore::cmd_explore(a, b);
+            // Ensure the baseline index is less than the comparison index
+            let (base_idx, comp_idx) = if a < b { (a, b) } else { (b, a) };
+            explore::cmd_explore(base_idx, comp_idx);
         }
         "-h" | "--help" => {
             println!(
@@ -151,8 +175,10 @@ Commands:
   scan                        Scan filesystem and save a snapshot
   list                        List available snapshots as JSON
   diff  <old_idx> <new_idx>   Print diff between two snapshots as JSON
+                              (old_idx < new_idx is enforced)
   show  <idx>                 Print a snapshot as flat JSON
   explore <old_idx> <new_idx> Open the interactive diff explorer
+                              (old_idx < new_idx is enforced)
 
 Exit codes: 0 success, 1 error, 2 bad arguments"
             );
