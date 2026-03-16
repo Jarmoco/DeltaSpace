@@ -22,7 +22,7 @@ brew install deltaspace
 
 one-liner:
 ```bash
-brew install jarmoco/deltaspace/deltaspace`
+brew install jarmoco/deltaspace/deltaspace
 ```
 
 ## Usage
