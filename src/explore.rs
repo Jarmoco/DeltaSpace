@@ -63,6 +63,9 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
             println!("  (no changed sub-folders)");
         }
 
+        // Store total change for root path
+        let total_change = rows.iter().map(|(_, d, _)| d).sum::<i64>();
+
         for (i, (path, d, cur)) in rows.iter().enumerate() {
             let name = Path::new(path)
                 .file_name()
@@ -86,7 +89,18 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
         }
 
         println!("  {}", "─".repeat(56));
+        
+        // if path is root, show total change
+        if parent.is_none() {
+            let color = if total_change > 0 { "\x1b[92m" } else { "\x1b[91m" };
+            let reset = "\x1b[0m";
+            println!("  {}Total change:                 {}{}", color, crate::terminal::fmt_size(total_change as f64), reset);
+            println!("  {}", "─".repeat(56));
+        }
+
         println!("  {}", crate::constants::HELP);
+
+
         let _ = std::io::stdout().flush();
 
         match crate::terminal::getch().as_str() {
@@ -101,7 +115,7 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
                 cursors.insert(parent.clone(), cur_idx);
                 stack.push(Some(rows[cur_idx].0.to_string()));
             }
-            "\x1b[D" | "b" | "h" if stack.len() > 1 => {
+            "\x1b[D" | "b" | "h" | "\x7f" if stack.len() > 1 => {
                 cursors.insert(parent, cur_idx);
                 stack.pop();
             }

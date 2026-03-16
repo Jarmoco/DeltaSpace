@@ -25,7 +25,7 @@ pub const EXCLUDE_PREFIXES: &[&str] = &[
     "/media",
 ];
 
-pub const HELP: &str = "↑↓/jk move  →/Enter/l drill  ←/b/h back  q quit";
+pub const HELP: &str = "↑↓/jk move  →/Enter/l drill  ←/b/h/backsp back  q quit";
 
 pub fn is_excluded(path: &str) -> bool {
     for prefix in EXCLUDE_PREFIXES {
