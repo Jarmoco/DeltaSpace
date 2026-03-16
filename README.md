@@ -12,6 +12,19 @@
 - TUI for interactive usage
 - CLI arguments for programmatic use
 
+## Installation 
+You can manually install from [releases](https://github.com/Jarmoco/DeltaSpace/releases) or use [Homebrew](https://brew.sh/):
+
+```bash
+brew tap Jarmoco/deltaspace
+brew install deltaspace
+```
+
+one-liner:
+```bash
+brew install jarmoco/deltaspace/deltaspace`
+```
+
 ## Usage
 
 ### Interactive mode
@@ -40,7 +53,7 @@ Compilation time is around <2s due to the absence of dependencies.
 ## Building
 
 To build the code you need to have `cargo` and `nfpm` installed.
-To cross compile for macos, you also need `zig` and `cargo-zigbuild` installed and the `aarch64-apple-darwin` target added to rustup.
+To cross compile from linux to macos, you also need `zig` and `cargo-zigbuild` installed and the `aarch64-apple-darwin` target added to rustup.
 
 Then run:
 
