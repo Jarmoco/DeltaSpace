@@ -1,6 +1,6 @@
 # DeltaSpace
 
-**DeltaSpace** is a _lightweight, zero crate dependency_ **filesystem snapshot and diff explorer** tool for Linux.
+**DeltaSpace** is a _lightweight, zero crate dependency_ **filesystem snapshot and diff explorer** tool for Linux and MacOS.
 
 ![DeltaSpace Screenshot](.github/screenshot.png)
 
@@ -39,7 +39,10 @@ Compilation time is around <2s due to the absence of dependencies.
 
 ## Building
 
-To build the code you need to have `cargo` and `nfpm` installed. Then run:
+To build the code you need to have `cargo` and `nfpm` installed.
+To cross compile for macos, you also need `zig` and `cargo-zigbuild` installed and the `aarch64-apple-darwin` target added to rustup.
+
+Then run:
 
 ```bash
 ./build.sh

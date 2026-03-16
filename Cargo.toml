@@ -2,5 +2,19 @@
 name = "deltaspace"
 version = "0.1.0"
 edition = "2024"
+authors = ["Jarmoco"]
 
 [dependencies]
+
+
+[profile.release]
+strip = true
+opt-level = "z"
+codegen-units = 1
+panic = "abort"
+lto = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

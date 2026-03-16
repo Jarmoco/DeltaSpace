@@ -12,23 +12,32 @@ use std::{
     process::Command,
 };
 
+#[cfg(target_os = "linux")]
+const STTY_FLAG: &str = "-F";
+#[cfg(target_os = "macos")]
+const STTY_FLAG: &str = "-f";
+
 pub fn tty_raw() {
     Command::new("stty")
-        .args(["-F", "/dev/tty", "raw", "-echo", "min", "1", "time", "0"])
+        .args([
+            STTY_FLAG, "/dev/tty", "raw", "-echo", "min", "1", "time", "0",
+        ])
         .status()
         .ok();
 }
 
 pub fn tty_raw_timeout() {
     Command::new("stty")
-        .args(["-F", "/dev/tty", "raw", "-echo", "min", "0", "time", "1"])
+        .args([
+            STTY_FLAG, "/dev/tty", "raw", "-echo", "min", "0", "time", "1",
+        ])
         .status()
         .ok();
 }
 
 pub fn tty_restore() {
     Command::new("stty")
-        .args(["-F", "/dev/tty", "sane"])
+        .args([STTY_FLAG, "/dev/tty", "sane"])
         .status()
         .ok();
 }
