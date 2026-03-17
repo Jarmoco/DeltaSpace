@@ -9,14 +9,145 @@
 use std::{
     fs,
     io::{self, Read, Write},
-    process::Command,
+    os::unix::io::AsRawFd,
 };
 
+#[cfg(target_os = "macos")]
+use std::process::Command;
+
 #[cfg(target_os = "linux")]
-const STTY_FLAG: &str = "-F";
+mod termios_linux {
+    pub const TCSANOW: i32 = 0;
+
+    pub const ICANON: u32 = 0o0002;
+    pub const ECHO: u32 = 0o0010;
+
+    pub const VMIN: usize = 4;
+    pub const VTIME: usize = 5;
+    pub const NCCS: usize = 19;
+
+    pub type tcflag_t = u32;
+    pub type cc_t = u8;
+
+    #[repr(C)]
+    pub struct termios {
+        pub c_iflag: tcflag_t,
+        pub c_oflag: tcflag_t,
+        pub c_cflag: tcflag_t,
+        pub c_lflag: tcflag_t,
+        pub c_line: cc_t,
+        pub c_cc: [cc_t; NCCS],
+    }
+
+    unsafe extern "C" {
+        pub fn tcgetattr(fd: i32, termios_p: *mut termios) -> i32;
+        pub fn tcsetattr(fd: i32, opt: i32, termios_p: *const termios) -> i32;
+    }
+}
+
+unsafe impl Send for termios_linux::termios {}
+unsafe impl Sync for termios_linux::termios {}
+
+#[cfg(target_os = "linux")]
+thread_local! {
+    static ORIGINAL_TERMIOS: std::cell::RefCell<Option<termios_linux::termios>> = const { std::cell::RefCell::new(None) };
+}
+
 #[cfg(target_os = "macos")]
 const STTY_FLAG: &str = "-f";
 
+#[cfg(target_os = "linux")]
+fn tty_fd() -> Option<std::fs::File> {
+    fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+        .ok()
+}
+
+#[cfg(target_os = "linux")]
+pub fn tty_raw() {
+    use termios_linux::*;
+
+    let fd = match tty_fd() {
+        Some(f) => f,
+        None => return,
+    };
+
+    let mut settings = std::mem::MaybeUninit::<termios>::uninit();
+    unsafe {
+        if tcgetattr(fd.as_raw_fd(), settings.as_mut_ptr()) != 0 {
+            return;
+        }
+        let mut settings = settings.assume_init();
+
+        ORIGINAL_TERMIOS.with(|original| {
+            if original.borrow().is_none() {
+                let mut copy = std::mem::zeroed::<termios>();
+                copy.c_iflag = settings.c_iflag;
+                copy.c_oflag = settings.c_oflag;
+                copy.c_cflag = settings.c_cflag;
+                copy.c_lflag = settings.c_lflag;
+                copy.c_line = settings.c_line;
+                copy.c_cc.copy_from_slice(&settings.c_cc);
+                *original.borrow_mut() = Some(copy);
+            }
+        });
+
+        settings.c_lflag &= !(ICANON | ECHO);
+        settings.c_cc[VMIN] = 1;
+        settings.c_cc[VTIME] = 0;
+
+        tcsetattr(fd.as_raw_fd(), TCSANOW, &settings);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn tty_raw_timeout() {
+    use termios_linux::*;
+
+    let fd = match tty_fd() {
+        Some(f) => f,
+        None => return,
+    };
+
+    let mut settings = std::mem::MaybeUninit::<termios>::uninit();
+    unsafe {
+        if tcgetattr(fd.as_raw_fd(), settings.as_mut_ptr()) != 0 {
+            return;
+        }
+        let mut settings = settings.assume_init();
+
+        settings.c_lflag &= !(ICANON | ECHO);
+        settings.c_cc[VMIN] = 0;
+        settings.c_cc[VTIME] = 1;
+
+        tcsetattr(fd.as_raw_fd(), TCSANOW, &settings);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn tty_restore() {
+    use termios_linux::*;
+
+    let fd = match tty_fd() {
+        Some(f) => f,
+        None => return,
+    };
+
+    ORIGINAL_TERMIOS.with(|original| {
+        if let Some(ref orig) = *original.borrow() {
+            unsafe {
+                tcsetattr(fd.as_raw_fd(), TCSANOW, orig);
+            }
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+const STTY_FLAG: &str = "-f";
+
+#[cfg(target_os = "macos")]
 pub fn tty_raw() {
     Command::new("stty")
         .args([
@@ -26,6 +157,7 @@ pub fn tty_raw() {
         .ok();
 }
 
+#[cfg(target_os = "macos")]
 pub fn tty_raw_timeout() {
     Command::new("stty")
         .args([
@@ -35,6 +167,7 @@ pub fn tty_raw_timeout() {
         .ok();
 }
 
+#[cfg(target_os = "macos")]
 pub fn tty_restore() {
     Command::new("stty")
         .args([STTY_FLAG, "/dev/tty", "sane"])
