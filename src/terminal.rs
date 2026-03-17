@@ -55,8 +55,11 @@ mod termios_macos {
     pub const VTIME: usize = 17;
     pub const NCCS: usize = 20;
 
+    #[allow(non_camel_case_types)]
     pub type tcflag_t = u32;
+    #[allow(non_camel_case_types)]
     pub type cc_t = u8;
+    #[allow(non_camel_case_types)]
     pub type speed_t = u64;
 
     #[repr(C)]
@@ -76,7 +79,9 @@ mod termios_macos {
     }
 }
 
+#[cfg(target_os = "linux")]
 unsafe impl Send for termios_linux::termios {}
+#[cfg(target_os = "linux")]
 unsafe impl Sync for termios_linux::termios {}
 
 #[cfg(target_os = "linux")]
