@@ -19,14 +19,16 @@ mod termios_linux {
     pub const ICANON: u32 = 0o0002;
     pub const ECHO: u32 = 0o0010;
 
-    pub const VMIN: usize = 4;
+    pub const VMIN: usize = 6;
     pub const VTIME: usize = 5;
-    pub const NCCS: usize = 19;
+    pub const NCCS: usize = 32;
 
     #[allow(non_camel_case_types)]
     pub type tcflag_t = u32;
     #[allow(non_camel_case_types)]
     pub type cc_t = u8;
+    #[allow(non_camel_case_types)]
+    pub type speed_t = u32;
 
     #[repr(C)]
     pub struct termios {
@@ -36,6 +38,8 @@ mod termios_linux {
         pub c_lflag: tcflag_t,
         pub c_line: cc_t,
         pub c_cc: [cc_t; NCCS],
+        pub c_ispeed: speed_t,
+        pub c_ospeed: speed_t,
     }
 
     unsafe extern "C" {
@@ -132,6 +136,8 @@ pub fn tty_raw() {
                 copy.c_lflag = settings.c_lflag;
                 copy.c_line = settings.c_line;
                 copy.c_cc.copy_from_slice(&settings.c_cc);
+                copy.c_ispeed = settings.c_ispeed;
+                copy.c_ospeed = settings.c_ospeed;
                 *original.borrow_mut() = Some(copy);
             }
         });
