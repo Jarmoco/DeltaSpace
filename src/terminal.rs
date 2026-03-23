@@ -301,7 +301,17 @@ pub fn getch() -> String {
 }
 
 pub fn clear() {
-    print!("\x1b[H\x1b[J");
+    print!("\x1b[H\x1b[2J");
+    let _ = io::stdout().flush();
+}
+
+pub fn enter_alternate_screen() {
+    print!("\x1b[?1049h");
+    let _ = io::stdout().flush();
+}
+
+pub fn exit_alternate_screen() {
+    print!("\x1b[?1049l");
     let _ = io::stdout().flush();
 }
 

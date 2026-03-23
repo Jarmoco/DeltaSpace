@@ -28,6 +28,8 @@ mod utils;
 use std::{io::Write, path::Path};
 
 fn interactive_menu() {
+    terminal::enter_alternate_screen();
+
     loop {
         terminal::clear();
         println!();
@@ -106,7 +108,10 @@ fn interactive_menu() {
                 prune::cmd_prune();
             }
             "q" | "Q" | "\x03" => {
+                terminal::exit_alternate_screen();
+                terminal::clear();
                 println!("Bye!");
+                println!();
                 break;
             }
             _ => {}
