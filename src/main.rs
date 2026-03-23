@@ -120,6 +120,8 @@ fn interactive_menu() {
 }
 
 fn main() {
+    terminal::init_terminal_size();
+
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
