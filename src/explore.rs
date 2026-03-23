@@ -8,9 +8,30 @@
 
 use std::{collections::HashMap, io::Write, path::Path};
 
-const CHART_COLS: usize = 40;
+const CHART_COLS: usize = 50;
 const CHART_ROWS: usize = 8;
 const CHART_PADDING: f64 = 0.20;
+
+fn parse_snapshot_datetime(path: &str) -> Option<(i32, u32, u32, u32, u32)> {
+    let name = Path::new(path).file_name()?.to_string_lossy().into_owned();
+    let inner = name.strip_prefix("snapshot_")?.strip_suffix(".json")?;
+    let parts: Vec<&str> = inner.split('_').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let date_parts: Vec<&str> = parts[0].split('-').collect();
+    let time_parts: Vec<&str> = parts[1].split('-').collect();
+    if date_parts.len() < 3 || time_parts.len() < 2 {
+        return None;
+    }
+    Some((
+        date_parts[0].parse().ok()?,
+        date_parts[1].parse().ok()?,
+        date_parts[2].parse().ok()?,
+        time_parts[0].parse().ok()?,
+        time_parts[1].parse().ok()?,
+    ))
+}
 
 fn children<'a>(
     diff: &'a HashMap<String, (i64, u64)>,
@@ -71,7 +92,12 @@ fn interpolate(sizes: &[u64], cols: usize) -> Vec<f64> {
     result
 }
 
-fn render_chart(values: &[f64], sizes: &[u64], _path: &str) {
+fn render_chart(
+    values: &[f64],
+    sizes: &[u64],
+    _path: &str,
+    dates: &[Option<(i32, u32, u32, u32, u32)>],
+) {
     let n = values.len();
     if n == 0 || values.iter().all(|&v| v == 0.0) {
         return;
@@ -177,6 +203,21 @@ fn render_chart(values: &[f64], sizes: &[u64], _path: &str) {
 
     let n_snaps = sizes.len();
     if n_snaps > 0 {
+        let date_labels: Vec<String> = dates
+            .iter()
+            .map(|d| {
+                d.map(|(_, month, day, _, _)| format!("{:02}-{:02}", day, month))
+                    .unwrap_or_default()
+            })
+            .collect();
+        let time_labels: Vec<String> = dates
+            .iter()
+            .map(|d| {
+                d.map(|(_, _, _, h, mi)| format!("{:02}:{:02}", h, mi))
+                    .unwrap_or_default()
+            })
+            .collect();
+
         print!("  {:>8} ", "");
         let mut prev_col: isize = -1;
         for i in 0..n_snaps {
@@ -186,16 +227,53 @@ fn render_chart(values: &[f64], sizes: &[u64], _path: &str) {
                 i * (CHART_COLS - 1) / (n_snaps - 1)
             };
             if col < CHART_COLS {
-                let spaces = if prev_col < 0 {
-                    col
+                let label = &date_labels[i];
+                let label_len = label.len();
+                let offset = if label_len == 0 {
+                    0
                 } else {
-                    col.saturating_sub(prev_col as usize + 1)
+                    col.saturating_sub(label_len / 2)
+                };
+                let spaces = if prev_col < 0 {
+                    offset
+                } else {
+                    offset.saturating_sub(prev_col as usize + 1)
                 };
                 for _ in 0..spaces {
                     print!(" ");
                 }
-                print!("{}", i);
-                prev_col = col as isize;
+                print!("{}", label);
+                prev_col = (offset + label_len) as isize;
+            }
+        }
+        println!();
+
+        print!("  {:>8} ", "");
+        prev_col = -1;
+        for i in 0..n_snaps {
+            let col = if n_snaps == 1 {
+                CHART_COLS / 2
+            } else {
+                i * (CHART_COLS - 1) / (n_snaps - 1)
+            };
+            if col < CHART_COLS {
+                let label = &time_labels[i];
+                let label_len = label.len();
+                let offset = if label_len == 0 {
+                    0
+                } else {
+                    col.saturating_sub(label_len / 2)
+                };
+                let spaces = if prev_col < 0 {
+                    offset
+                } else {
+                    offset.saturating_sub(prev_col as usize + 1)
+                };
+                for _ in 0..spaces {
+                    print!(" ");
+                }
+                print!("{}", label);
+                prev_col = (offset + label_len) as isize;
             }
         }
         println!();
@@ -214,8 +292,10 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
     }
 
     let mut snapshots: Vec<HashMap<String, u64>> = Vec::new();
+    let mut snapshot_dates: Vec<Option<(i32, u32, u32, u32, u32)>> = Vec::new();
     for i in idx_a..=idx_b {
         snapshots.push(crate::snapshot::load_flat(&files[i]));
+        snapshot_dates.push(parse_snapshot_datetime(&files[i]));
     }
 
     let mut stack: Vec<Option<String>> = vec![None];
@@ -233,7 +313,7 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
         println!();
         println!("  PATH : {}", parent_str);
         println!("  {:<14}  {:<12}  NAME", "CHANGE", "CURRENT");
-        println!("  {}", "─".repeat(56));
+        println!("  {}", "─".repeat(62));
 
         if rows.is_empty() {
             println!("  (no changed sub-folders)");
@@ -263,7 +343,7 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
             );
         }
 
-        println!("  {}", "─".repeat(56));
+        println!("  {}", "─".repeat(62));
 
         if parent.is_none() {
             let color = if total_change > 0 {
@@ -278,7 +358,7 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
                 crate::terminal::fmt_size(total_change as f64),
                 reset
             );
-            println!("  {}", "─".repeat(56));
+            println!("  {}", "─".repeat(62));
         }
 
         if chart_visible {
@@ -289,18 +369,12 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
             };
             let size_over_time = folder_size_over_time(&snapshots, chart_path);
             let interpolated = interpolate(&size_over_time, CHART_COLS);
-            render_chart(&interpolated, &size_over_time, chart_path);
-            println!("  {}", "─".repeat(56));
+            render_chart(&interpolated, &size_over_time, chart_path, &snapshot_dates);
+            println!("  {}", "─".repeat(62));
         }
 
-        let help_base = "↑↓/jk move  →/Enter/l drill  ←/b/h/backsp back";
-        let help_end = "  q quit";
-        let help_chart = if chart_visible {
-            "  g hide chart"
-        } else {
-            "  g show chart"
-        };
-        println!("  {help_base}{help_chart}{help_end}");
+        let help_base = "↑↓ move  → drill  ← back  g toggle chart   q quit";
+        println!("  {help_base}");
 
         let _ = std::io::stdout().flush();
 
