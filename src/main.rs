@@ -11,7 +11,7 @@
  *   show  <idx>                 Print a snapshot as flat JSON
  *   explore <old_idx> <new_idx> Open the interactive diff explorer
  *
- * Exit codes: 0 success, 1 error, 2 bad arguments 
+ * Exit codes: 0 success, 1 error, 2 bad arguments
  * -------------------------------------------------------------------------- */
 
 mod constants;
@@ -74,7 +74,7 @@ fn interactive_menu() {
                         println!();
                         last_day = day.to_string();
                     }
-                    
+
                     println!(
                         "  [{}] {}",
                         i,
@@ -109,6 +109,7 @@ fn interactive_menu() {
             }
             "q" | "Q" | "\x03" => {
                 terminal::exit_alternate_screen();
+                terminal::tty_restore();
                 terminal::clear();
                 println!("Bye!");
                 println!();
@@ -120,6 +121,13 @@ fn interactive_menu() {
 }
 
 fn main() {
+    std::panic::set_hook(Box::new(|_| {
+        terminal::exit_alternate_screen();
+        terminal::tty_restore();
+        eprintln!("\nTerminated.");
+    }));
+
+    terminal::init_signal_handler();
     terminal::init_terminal_size();
 
     let args: Vec<String> = std::env::args().collect();

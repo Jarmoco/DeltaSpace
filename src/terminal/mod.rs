@@ -9,6 +9,7 @@
 use std::{
     fs, io,
     io::{Read, Write},
+    sync::atomic::Ordering,
 };
 
 #[cfg(target_os = "linux")]
@@ -16,6 +17,10 @@ mod linux;
 
 #[cfg(target_os = "macos")]
 mod macos;
+
+mod signal;
+
+pub use signal::{init_signal_handler, ALTERNATE_MODE};
 
 #[repr(C)]
 struct winsize {
@@ -118,11 +123,13 @@ pub fn clear() {
 pub fn enter_alternate_screen() {
     print!("\x1b[?1049h");
     let _ = io::stdout().flush();
+    ALTERNATE_MODE.store(true, Ordering::SeqCst);
 }
 
 pub fn exit_alternate_screen() {
     print!("\x1b[?1049l");
     let _ = io::stdout().flush();
+    ALTERNATE_MODE.store(false, Ordering::SeqCst);
 }
 
 pub fn fmt_size(mut n: f64) -> String {
