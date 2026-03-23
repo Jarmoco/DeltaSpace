@@ -45,6 +45,46 @@ for help, run:
 ./deltaspace -h
 ```
 
+## Automatic Scans
+
+You can schedule automatic filesystem scans using your OS's task scheduler.
+
+### Linux (systemd)
+
+Create a user-level service at `~/.config/systemd/user/deltaspace-scan.service`:
+
+```ini
+[Unit]
+Description=Run deltaspace scan
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/deltaspace scan
+```
+
+Create a timer at `~/.config/systemd/user/deltaspace-scan.timer`:
+
+```ini
+[Unit]
+Description=Run deltaspace scan every 2 hours
+
+[Timer]
+OnCalendar=*-*-* 00/2:00:00
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable lingering (so the timer runs without an active login session) and start the timer:
+
+```bash
+sudo loginctl enable-linger $USER
+systemctl --user daemon-reload
+systemctl --user enable --now deltaspace-scan.timer
+```
+
 ## Performance
 
 Tested on my system, it created a snapshot of ~127k directories in 6.5s.
