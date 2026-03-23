@@ -25,8 +25,7 @@ pub const EXCLUDE_PREFIXES: &[&str] = &[
     "/media",
 ];
 
-pub const HELP: &str = "↑↓/jk move  →/Enter/l drill  ←/b/h/backsp back  q quit";
-
+#[allow(dead_code)]
 pub fn is_excluded(path: &str) -> bool {
     for prefix in EXCLUDE_PREFIXES {
         if path == *prefix || path.starts_with(&format!("{}/", prefix)) {
