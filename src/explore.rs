@@ -8,9 +8,16 @@
 
 use std::{collections::HashMap, io::Write, path::Path};
 
-const CHART_COLS: usize = 50;
 const CHART_ROWS: usize = 8;
 const CHART_PADDING: f64 = 0.20;
+
+fn chart_cols() -> usize {
+    crate::terminal::get_width().saturating_sub(20).max(30)
+}
+
+fn table_width() -> usize {
+    crate::terminal::get_width().saturating_sub(4)
+}
 
 fn parse_snapshot_datetime(path: &str) -> Option<(i32, u32, u32, u32, u32)> {
     let name = Path::new(path).file_name()?.to_string_lossy().into_owned();
@@ -183,7 +190,7 @@ fn render_chart(
                 .unwrap_or_default()
         };
         print!("  {:>8} ", label);
-        for col in 0..CHART_COLS.min(n) {
+        for col in 0..chart_cols().min(n) {
             let h = heights[col].max(1).min(CHART_ROWS);
             if row < h {
                 let from_top = h - 1 - row;
@@ -222,11 +229,11 @@ fn render_chart(
         let mut prev_col: isize = -1;
         for i in 0..n_snaps {
             let col = if n_snaps == 1 {
-                CHART_COLS / 2
+                chart_cols() / 2
             } else {
-                i * (CHART_COLS - 1) / (n_snaps - 1)
+                i * (chart_cols() - 1) / (n_snaps - 1)
             };
-            if col < CHART_COLS {
+            if col < chart_cols() {
                 let label = &date_labels[i];
                 let label_len = label.len();
                 let offset = if label_len == 0 {
@@ -252,11 +259,11 @@ fn render_chart(
         prev_col = -1;
         for i in 0..n_snaps {
             let col = if n_snaps == 1 {
-                CHART_COLS / 2
+                chart_cols() / 2
             } else {
-                i * (CHART_COLS - 1) / (n_snaps - 1)
+                i * (chart_cols() - 1) / (n_snaps - 1)
             };
-            if col < CHART_COLS {
+            if col < chart_cols() {
                 let label = &time_labels[i];
                 let label_len = label.len();
                 let offset = if label_len == 0 {
@@ -309,11 +316,17 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
         let max_idx = rows.len().saturating_sub(1);
         let cur_idx = cursors.get(&parent).copied().unwrap_or(0).min(max_idx);
 
+        let available_height = crate::terminal::get_height();
+        let base_lines = 7;
+        let chart_lines = CHART_ROWS + 2 + 2;
+        let required_with_chart = base_lines + rows.len() + chart_lines;
+        let show_chart = chart_visible && required_with_chart <= available_height;
+
         crate::terminal::clear();
         println!();
         println!("  PATH : {}", parent_str);
         println!("  {:<14}  {:<12}  NAME", "CHANGE", "CURRENT");
-        println!("  {}", "─".repeat(62));
+        println!("  {}", "─".repeat(table_width()));
 
         if rows.is_empty() {
             println!("  (no changed sub-folders)");
@@ -343,7 +356,7 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
             );
         }
 
-        println!("  {}", "─".repeat(62));
+        println!("  {}", "─".repeat(table_width()));
 
         if parent.is_none() {
             let color = if total_change > 0 {
@@ -358,19 +371,19 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
                 crate::terminal::fmt_size(total_change as f64),
                 reset
             );
-            println!("  {}", "─".repeat(62));
+            println!("  {}", "─".repeat(table_width()));
         }
 
-        if chart_visible {
+        if show_chart {
             let chart_path = if !rows.is_empty() {
                 rows[cur_idx].0
             } else {
                 parent_str
             };
             let size_over_time = folder_size_over_time(&snapshots, chart_path);
-            let interpolated = interpolate(&size_over_time, CHART_COLS);
+            let interpolated = interpolate(&size_over_time, chart_cols());
             render_chart(&interpolated, &size_over_time, chart_path, &snapshot_dates);
-            println!("  {}", "─".repeat(62));
+            println!("  {}", "─".repeat(table_width()));
         }
 
         let help_base = "↑↓ move  → drill  ← back  g toggle chart   q quit";

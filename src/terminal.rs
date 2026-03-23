@@ -12,6 +12,52 @@ use std::{
     os::unix::io::AsRawFd,
 };
 
+#[repr(C)]
+struct winsize {
+    ws_row: u16,
+    ws_col: u16,
+    ws_xpixel: u16,
+    ws_ypixel: u16,
+}
+
+#[cfg(target_os = "linux")]
+const TIOCGWINSZ: u64 = 0x5413;
+
+#[cfg(target_os = "macos")]
+const TIOCGWINSZ: u64 = 0x40087468;
+
+const STDIN_FILENO: i32 = 0;
+const STDOUT_FILENO: i32 = 1;
+
+unsafe extern "C" {
+    fn ioctl(fd: i32, request: u64, ...) -> i32;
+}
+
+fn get_terminal_size_impl(fd: i32) -> Option<(usize, usize)> {
+    unsafe {
+        let mut ws = std::mem::zeroed::<winsize>();
+        if ioctl(fd, TIOCGWINSZ, &mut ws) == 0 {
+            Some((ws.ws_col as usize, ws.ws_row as usize))
+        } else {
+            None
+        }
+    }
+}
+
+pub fn get_width() -> usize {
+    get_terminal_size_impl(STDOUT_FILENO)
+        .or_else(|| get_terminal_size_impl(STDIN_FILENO))
+        .map(|(w, _)| w)
+        .unwrap_or(80)
+}
+
+pub fn get_height() -> usize {
+    get_terminal_size_impl(STDOUT_FILENO)
+        .or_else(|| get_terminal_size_impl(STDIN_FILENO))
+        .map(|(_, h)| h)
+        .unwrap_or(24)
+}
+
 #[cfg(target_os = "linux")]
 mod termios_linux {
     pub const TCSANOW: i32 = 0;
