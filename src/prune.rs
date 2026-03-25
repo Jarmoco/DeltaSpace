@@ -14,15 +14,25 @@ use std::{
 
 /* --- parsing helpers --- */
 
-pub fn parse_snapshot_date(path: &str) -> Option<(i32, u32, u32)> {
+pub fn parse_snapshot_date(path: &str) -> Option<(i32, u32, u32, u32, u32)> {
     let name = Path::new(path).file_name()?.to_string_lossy().into_owned();
     let inner = name.strip_prefix("snapshot_")?.strip_suffix(".json")?;
-    let date = inner.split('_').next()?;
-    let p: Vec<&str> = date.split('-').collect();
-    if p.len() < 3 {
+    let parts: Vec<&str> = inner.split('_').collect();
+    if parts.len() < 2 {
         return None;
     }
-    Some((p[0].parse().ok()?, p[1].parse().ok()?, p[2].parse().ok()?))
+    let dp: Vec<&str> = parts[0].split('-').collect();
+    let tp: Vec<&str> = parts[1].split('-').collect();
+    if dp.len() < 3 || tp.len() < 2 {
+        return None;
+    }
+    Some((
+        dp[0].parse().ok()?,
+        dp[1].parse().ok()?,
+        dp[2].parse().ok()?,
+        tp[0].parse().ok()?,
+        tp[1].parse().ok()?,
+    ))
 }
 
 fn week_of_month(day: u32) -> u32 {
@@ -56,6 +66,8 @@ pub struct SnapEntry {
     pub year: i32,
     pub month: u32,
     pub day: u32,
+    pub hour: u32,
+    pub minute: u32,
     pub marked: bool,
 }
 
@@ -63,7 +75,7 @@ pub fn group_snapshots(files: &[String]) -> Vec<SnapEntry> {
     let mut entries: Vec<SnapEntry> = files
         .iter()
         .filter_map(|f| {
-            let (y, mo, d) = parse_snapshot_date(f)?;
+            let (y, mo, d, h, mi) = parse_snapshot_date(f)?;
             Some(SnapEntry {
                 path: f.clone(),
                 name: Path::new(f)
@@ -73,6 +85,8 @@ pub fn group_snapshots(files: &[String]) -> Vec<SnapEntry> {
                 year: y,
                 month: mo,
                 day: d,
+                hour: h,
+                minute: mi,
                 marked: false,
             })
         })
@@ -81,17 +95,43 @@ pub fn group_snapshots(files: &[String]) -> Vec<SnapEntry> {
     entries
 }
 
+/* --- display formatting --- */
+
+fn format_display_name(e: &SnapEntry) -> String {
+    format!(
+        "Snapshot: \x1b[94m{:02}\x1b[0m \x1b[90m{}\x1b[0m \x1b[2m{:04}\x1b[0m - \x1b[32m{:02}\x1b[90m:\x1b[32m{:02}\x1b[0m",
+        e.day,
+        month_name(e.month),
+        e.year,
+        e.hour,
+        e.minute,
+    )
+}
+
+fn format_display_name_plain(e: &SnapEntry) -> String {
+    format!(
+        "Snapshot: {:02} {} {:04} - {:02}:{:02}",
+        e.day,
+        month_name(e.month),
+        e.year,
+        e.hour,
+        e.minute,
+    )
+}
+
 /* --- TUI rendering --- */
 
 pub fn render_prune(entries: &[SnapEntry], cursor: usize) {
     crate::terminal::clear();
+    let w = crate::terminal::get_width();
     println!();
     println!("  PRUNE SNAPSHOTS");
-    println!("  ↑↓/jk navigate   Space/x toggle   a all   n none   d DELETE marked   q back");
-    println!("  {}", "─".repeat(70));
+    println!("  ↑↓/jk navigate   Space/x/Enter toggle   a all   n none   d DELETE marked   q back");
+    println!("  {}", "─".repeat(w.saturating_sub(4)));
 
     let mut last_ym: Option<(i32, u32)> = None;
     let mut last_week: Option<u32> = None;
+    let mut last_day: Option<u32> = None;
 
     for (i, e) in entries.iter().enumerate() {
         let ym = (e.year, e.month);
@@ -101,30 +141,50 @@ pub fn render_prune(entries: &[SnapEntry], cursor: usize) {
             if last_ym.is_some() {
                 println!();
             }
-            let heading = format!("── {} {:04} ", month_name(e.month), e.year);
-            let fill = "─".repeat(70usize.saturating_sub(4 + heading.len()));
-            println!("  \x1b[1m{}{}──\x1b[0m", heading, fill);
+            let label = format!("{} {:04}", month_name(e.month), e.year);
+            let fill = "─".repeat(42usize.saturating_sub(5 + label.len()));
+            println!(
+                "  \x1b[90m──\x1b[0m \x1b[2m{}\x1b[0m \x1b[90m{}\x1b[0m",
+                label, fill
+            );
             last_ym = Some(ym);
             last_week = None;
+            last_day = None;
         }
 
         if Some(week) != last_week {
             println!("    \x1b[2mWeek {}\x1b[0m", week);
             last_week = Some(week);
+            last_day = None;
         }
 
-        let check = if e.marked {
-            "\x1b[91m[x]\x1b[0m"
+        if last_day.is_some() && last_day != Some(e.day) {
+            println!();
+        }
+        last_day = Some(e.day);
+
+        let check = if e.marked { "[x]" } else { "[ ]" };
+        if i == cursor {
+            println!(
+                "      \x1b[7m{} {}\x1b[0m",
+                check,
+                format_display_name_plain(e)
+            );
         } else {
-            "[ ]"
-        };
-        let sel = if i == cursor { "\x1b[7m" } else { "" };
-        let reset = "\x1b[0m";
-        println!("      {}{} {}{}", sel, check, e.name, reset);
+            let marked = if e.marked { "\x1b[91m" } else { "" };
+            let rst = if e.marked { "\x1b[0m" } else { "" };
+            println!(
+                "      {}{} {}{}",
+                marked,
+                check,
+                format_display_name(e),
+                rst
+            );
+        }
     }
 
     println!();
-    println!("  {}", "─".repeat(70));
+    println!("  {}", "─".repeat(w.saturating_sub(4)));
 
     let n_marked = entries.iter().filter(|e| e.marked).count();
     if n_marked == 0 {
@@ -166,7 +226,7 @@ pub fn cmd_prune() {
                 cursor = (cursor + 1).min(n.saturating_sub(1));
             }
 
-            " " | "x" if !entries.is_empty() => {
+            " " | "x" | "\r" | "\n" if !entries.is_empty() => {
                 entries[cursor].marked = !entries[cursor].marked;
                 cursor = (cursor + 1).min(n.saturating_sub(1));
             }
@@ -190,15 +250,60 @@ pub fn cmd_prune() {
                     marked_count
                 );
                 for e in entries.iter().filter(|e| e.marked) {
-                    println!("    {}", e.name);
+                    println!("    {}", format_display_name(e));
                 }
-                print!("\n  Type YES to confirm, anything else to cancel: ");
+                println!("\n  Press Enter 3 times to confirm deletion:");
                 let _ = io::stdout().flush();
 
-                let mut confirm = String::new();
-                io::stdin().read_line(&mut confirm).ok();
+                let mut presses = 0usize;
+                while presses < 3 {
+                    print!("\r  [");
+                    for i in 0..3 {
+                        if i > 0 {
+                            print!(" ");
+                        }
+                        if i < presses {
+                            let color = match i {
+                                0 => "\x1b[32m",
+                                1 => "\x1b[33m",
+                                _ => "\x1b[31m",
+                            };
+                            print!("{}██████████\x1b[0m", color);
+                        } else {
+                            print!("\x1b[90m██████████\x1b[0m");
+                        }
+                    }
+                    print!("]");
+                    let _ = io::stdout().flush();
 
-                if confirm.trim() == "YES" {
+                    match crate::terminal::getch().as_str() {
+                        "\r" | "\n" => {
+                            presses += 1;
+                        }
+                        _ => {
+                            println!("\n  Cancelled.");
+                            crate::utils::pause();
+                            break;
+                        }
+                    }
+                }
+
+                if presses == 3 {
+                    print!("\r  [");
+                    for i in 0..3 {
+                        if i > 0 {
+                            print!(" ");
+                        }
+                        let color = match i {
+                            0 => "\x1b[32m",
+                            1 => "\x1b[33m",
+                            _ => "\x1b[31m",
+                        };
+                        print!("{}██████████\x1b[0m", color);
+                    }
+                    println!("]");
+                    let _ = io::stdout().flush();
+
                     let (mut deleted, mut failed) = (0u32, 0u32);
                     for e in entries.iter().filter(|e| e.marked) {
                         match fs::remove_file(&e.path) {
@@ -214,9 +319,6 @@ pub fn cmd_prune() {
                     let fresh = crate::snapshot::cmd_list(false);
                     entries = group_snapshots(&fresh);
                     cursor = cursor.min(entries.len().saturating_sub(1));
-                } else {
-                    println!("  Cancelled.");
-                    crate::utils::pause();
                 }
             }
 
