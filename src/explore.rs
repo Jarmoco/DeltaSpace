@@ -135,6 +135,17 @@ fn render_chart(
         })
         .collect();
 
+    let n_snaps = sizes.len();
+    let snap_cols: Vec<usize> = (0..n_snaps)
+        .map(|i| {
+            if n_snaps == 1 {
+                chart_cols() / 2
+            } else {
+                i * (chart_cols() - 1) / (n_snaps - 1)
+            }
+        })
+        .collect();
+
     let green_grad: Vec<&str> = vec![
         "\x1b[92m█",
         "\x1b[32m▓",
@@ -201,6 +212,8 @@ fn render_chart(
                 };
                 let gi = (from_top * grad.len() / h).min(grad.len() - 1);
                 print!("{}\x1b[0m", grad[gi]);
+            } else if snap_cols.contains(&col) {
+                print!("\x1b[2;90m│\x1b[0m");
             } else {
                 print!(" ");
             }
@@ -208,80 +221,43 @@ fn render_chart(
         println!();
     }
 
-    let n_snaps = sizes.len();
     if n_snaps > 0 {
-        let date_labels: Vec<String> = dates
-            .iter()
-            .map(|d| {
-                d.map(|(_, month, day, _, _)| format!("{:02}-{:02}", day, month))
-                    .unwrap_or_default()
-            })
-            .collect();
-        let time_labels: Vec<String> = dates
-            .iter()
-            .map(|d| {
-                d.map(|(_, _, _, h, mi)| format!("{:02}:{:02}", h, mi))
-                    .unwrap_or_default()
-            })
-            .collect();
-
-        print!("  {:>8} ", "");
-        let mut prev_col: isize = -1;
-        for i in 0..n_snaps {
-            let col = if n_snaps == 1 {
-                chart_cols() / 2
-            } else {
-                i * (chart_cols() - 1) / (n_snaps - 1)
-            };
-            if col < chart_cols() {
-                let label = &date_labels[i];
-                let label_len = label.len();
-                let offset = if label_len == 0 {
-                    0
+        let w = chart_cols().min(n);
+        let mut date_buf = vec![' '; w];
+        let mut time_buf = vec![' '; w];
+        for (i, &col) in snap_cols.iter().enumerate() {
+            if col >= w {
+                break;
+            }
+            if let Some(d) = dates[i] {
+                let date_str = format!("{:02}-{:02}", d.2, d.1);
+                let time_str = format!("{:02}:{:02}", d.3, d.4);
+                let ds = if col + date_str.len() > w {
+                    w - date_str.len()
                 } else {
-                    col.saturating_sub(label_len / 2)
+                    col
                 };
-                let spaces = if prev_col < 0 {
-                    offset
+                let ts = if col + time_str.len() > w {
+                    w - time_str.len()
                 } else {
-                    offset.saturating_sub(prev_col as usize + 1)
+                    col
                 };
-                for _ in 0..spaces {
-                    print!(" ");
+                for (j, ch) in date_str.chars().enumerate() {
+                    date_buf[ds + j] = ch;
                 }
-                print!("{}", label);
-                prev_col = (offset + label_len) as isize;
+                for (j, ch) in time_str.chars().enumerate() {
+                    time_buf[ts + j] = ch;
+                }
             }
         }
-        println!();
-
         print!("  {:>8} ", "");
-        prev_col = -1;
-        for i in 0..n_snaps {
-            let col = if n_snaps == 1 {
-                chart_cols() / 2
-            } else {
-                i * (chart_cols() - 1) / (n_snaps - 1)
-            };
-            if col < chart_cols() {
-                let label = &time_labels[i];
-                let label_len = label.len();
-                let offset = if label_len == 0 {
-                    0
-                } else {
-                    col.saturating_sub(label_len / 2)
-                };
-                let spaces = if prev_col < 0 {
-                    offset
-                } else {
-                    offset.saturating_sub(prev_col as usize + 1)
-                };
-                for _ in 0..spaces {
-                    print!(" ");
-                }
-                print!("{}", label);
-                prev_col = (offset + label_len) as isize;
-            }
+        for &ch in &date_buf {
+            print!("{}", ch);
+        }
+        println!();
+        print!("  {:>8} ", "");
+        for &ch in &time_buf {
+            print!("{}", ch);
         }
         println!();
     }
