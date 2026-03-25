@@ -122,7 +122,7 @@ mod imp {
     }
 
     #[link(name = "System", kind = "dylib")]
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "write"]
         fn sys_write(fd: i32, buf: *const u8, len: usize) -> isize;
         fn _exit(code: i32) -> !;
