@@ -35,11 +35,11 @@ pub fn parse_snapshot_date(path: &str) -> Option<(i32, u32, u32, u32, u32)> {
     ))
 }
 
-fn week_of_month(day: u32) -> u32 {
+pub fn week_of_month(day: u32) -> u32 {
     (day - 1) / 7 + 1
 }
 
-fn month_name(m: u32) -> &'static str {
+pub fn month_name(m: u32) -> &'static str {
     match m {
         1 => "January",
         2 => "February",
@@ -111,6 +111,17 @@ fn format_display_name(e: &SnapEntry) -> String {
 fn format_display_name_plain(e: &SnapEntry) -> String {
     format!(
         "Snapshot: {:02} {} {:04} - {:02}:{:02}",
+        e.day,
+        month_name(e.month),
+        e.year,
+        e.hour,
+        e.minute,
+    )
+}
+
+pub fn format_display_compact(e: &SnapEntry) -> String {
+    format!(
+        "{:02} {} {:04}  {:02}:{:02}",
         e.day,
         month_name(e.month),
         e.year,

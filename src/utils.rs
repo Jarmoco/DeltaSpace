@@ -17,12 +17,6 @@ pub fn pause() {
     let _ = io::stdin().read_line(&mut String::new());
 }
 
-pub fn read_usize_line() -> Option<usize> {
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf).ok()?;
-    buf.trim().parse().ok()
-}
-
 pub fn die(msg: &str, code: i32) -> ! {
     eprintln!("error: {}", msg);
     process::exit(code);
