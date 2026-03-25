@@ -18,9 +18,20 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 
+#[cfg(target_os = "linux")]
+mod libc;
+
+#[cfg(target_os = "linux")]
 mod signal;
 
-pub use signal::{init_signal_handler, ALTERNATE_MODE};
+pub static ALTERNATE_MODE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+pub use signal::init_signal_handler;
+
+#[cfg(not(target_os = "linux"))]
+pub fn init_signal_handler() {}
 
 #[repr(C)]
 struct winsize {
