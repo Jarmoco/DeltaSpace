@@ -60,8 +60,7 @@ if ! rustup target list | grep "aarch64-apple-darwin (installed)" > /dev/null; t
   exit 1
 fi 
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEVELOPER_DIR="$SCRIPT_DIR/MacOSX11.3.sdk" SDKROOT="$SCRIPT_DIR/MacOSX11.3.sdk" cargo zigbuild --target aarch64-apple-darwin --release
+cargo zigbuild --target aarch64-apple-darwin --release
 
 # Package the built binary (target/aarch64-apple-darwin/release/deltaspace) into tar.gz
 tar -czf ./dist/deltaspace_${VERSION}_macos_aarch64.tar.gz ./target/aarch64-apple-darwin/release/deltaspace
