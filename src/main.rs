@@ -76,12 +76,20 @@ fn render_selector(
         0
     };
 
+    let mut last_day: Option<(i32, u32, u32)> = None;
+
     for (i, e) in entries
         .iter()
         .enumerate()
         .skip(scroll_offset)
         .take(max_visible)
     {
+        let current_day = (e.year, e.month, e.day);
+        if last_day.is_some() && last_day != Some(current_day) {
+            println!();
+        }
+        last_day = Some(current_day);
+
         let label = prune::format_display_compact(e);
 
         let is_left_cursor = stage == 0 && i == cursor_left;
