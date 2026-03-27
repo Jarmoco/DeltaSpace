@@ -392,6 +392,20 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
                 chart_visible = !chart_visible;
             }
             "d" | "D" if !rows.is_empty() => {
+                let files = crate::snapshot::cmd_list(false);
+                if idx_b != files.len() - 1 {
+                    println!(
+                        "\n  \x1b[93mCan only delete when comparing to the latest snapshot.\x1b[0m"
+                    );
+                    println!(
+                        "  Currently viewing snapshot {} of {}.",
+                        idx_b + 1,
+                        files.len()
+                    );
+                    crate::utils::pause();
+                    continue;
+                }
+
                 let selected_path = rows[cur_idx].0;
                 let target_dir = crate::constants::TARGET_DIR.trim_end_matches('/');
                 let full_path = format!("{}/{}", target_dir, selected_path.trim_start_matches('/'));
