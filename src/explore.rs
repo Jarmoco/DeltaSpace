@@ -6,7 +6,12 @@
  * users to drill down into specific changed paths.
  * -------------------------------------------------------------------------- */
 
-use std::{collections::HashMap, io::Write, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    io::{self, Write},
+    path::Path,
+};
 
 const CHART_ROWS: usize = 8;
 const CHART_PADDING: f64 = 0.20;
@@ -362,7 +367,7 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
             println!("  {}", "─".repeat(table_width()));
         }
 
-        let help_base = "↑↓ move  → drill  ← back  g toggle chart   q quit";
+        let help_base = "↑↓ move  → drill  ← back  g toggle chart   d delete   q quit";
         println!("  {help_base}");
 
         let _ = std::io::stdout().flush();
@@ -385,6 +390,118 @@ pub fn cmd_explore(idx_a: usize, idx_b: usize) {
             }
             "g" | "G" => {
                 chart_visible = !chart_visible;
+            }
+            "d" | "D" if !rows.is_empty() => {
+                let selected_path = rows[cur_idx].0;
+                let target_dir = crate::constants::TARGET_DIR.trim_end_matches('/');
+                let full_path = format!("{}/{}", target_dir, selected_path.trim_start_matches('/'));
+
+                crate::terminal::clear();
+                println!();
+                println!("  \x1b[1mDelete folder?\x1b[0m");
+                println!("  {}", "─".repeat(table_width()));
+                println!("  Path: {}", full_path);
+                println!("  {}", "─".repeat(table_width()));
+                println!("  Press Enter 3 times to confirm deletion:");
+                let _ = io::stdout().flush();
+
+                let mut presses = 0usize;
+                while presses < 3 {
+                    print!("\r  [");
+                    for i in 0..3 {
+                        if i > 0 {
+                            print!(" ");
+                        }
+                        if i < presses {
+                            let color = match i {
+                                0 => "\x1b[32m",
+                                1 => "\x1b[33m",
+                                _ => "\x1b[31m",
+                            };
+                            print!("{}██████████\x1b[0m", color);
+                        } else {
+                            print!("\x1b[90m██████████\x1b[0m");
+                        }
+                    }
+                    print!("]");
+                    let _ = io::stdout().flush();
+
+                    match crate::terminal::getch().as_str() {
+                        "\r" | "\n" => {
+                            presses += 1;
+                        }
+                        _ => {
+                            println!("\n  Cancelled.");
+                            crate::utils::pause();
+                            break;
+                        }
+                    }
+                }
+
+                if presses == 3 {
+                    print!("\r  [");
+                    for i in 0..3 {
+                        if i > 0 {
+                            print!(" ");
+                        }
+                        let color = match i {
+                            0 => "\x1b[32m",
+                            1 => "\x1b[33m",
+                            _ => "\x1b[31m",
+                        };
+                        print!("{}██████████\x1b[0m", color);
+                    }
+                    println!("]");
+                    let _ = io::stdout().flush();
+
+                    let result = fs::remove_dir_all(&full_path);
+                    let mut succeeded = result.is_ok();
+
+                    if let Err(err) = result {
+                        if err.kind() == std::io::ErrorKind::PermissionDenied {
+                            println!("  \x1b[93mPermission denied, trying with elevated privileges...\x1b[0m");
+                            let _ = io::stdout().flush();
+
+                            let sudo_result = std::process::Command::new("pkexec")
+                                .args(["rm", "-rf", &full_path])
+                                .output();
+
+                            match sudo_result {
+                                Ok(output) if output.status.success() => {
+                                    println!(
+                                        "\n  Deleted (with elevated privileges): {}",
+                                        full_path
+                                    );
+                                    succeeded = true;
+                                }
+                                Ok(output) => {
+                                    let stderr = String::from_utf8_lossy(&output.stderr);
+                                    eprintln!("\n  Failed to delete (elevated): {}", stderr.trim());
+                                }
+                                Err(e) => {
+                                    eprintln!("\n  Failed to run elevated command: {}", e);
+                                }
+                            }
+                        } else {
+                            eprintln!("\n  Failed to delete: {}", err);
+                        }
+                    }
+
+                    if succeeded {
+                        println!("\n  Creating new snapshot with deletion applied...");
+                        let _ = io::stdout().flush();
+                        match crate::snapshot::apply_deletion(idx_b, selected_path) {
+                            Ok(new_path) => {
+                                println!("\n  Created: {}", new_path);
+                            }
+                            Err(e) => {
+                                eprintln!("\n  Failed to create snapshot: {}", e);
+                            }
+                        }
+                    }
+                    crate::utils::pause();
+                    break;
+                }
             }
             _ => {
                 cursors.insert(parent, cur_idx);

@@ -170,3 +170,64 @@ pub fn cmd_show(idx: usize, as_json: bool) -> HashMap<String, u64> {
     }
     data
 }
+
+pub fn apply_deletion(snapshot_idx: usize, path: &str) -> Result<String, String> {
+    let files = cmd_list(false);
+    if snapshot_idx >= files.len() {
+        return Err("Invalid snapshot index".to_string());
+    }
+    let source_filepath = &files[snapshot_idx];
+
+    let raw = fs::read_to_string(source_filepath).map_err(|e| e.to_string())?;
+    let mut val = crate::json::parse(&raw).map_err(|e| e.to_string())?;
+
+    let mut removed_size = 0u64;
+    if let crate::json::Value::Object(depth_map) = &val {
+        for (_depth, paths_val) in depth_map {
+            if let crate::json::Value::Object(paths) = paths_val {
+                if let Some(crate::json::Value::Number(n)) = paths.get(path) {
+                    removed_size = *n as u64;
+                    break;
+                }
+            }
+        }
+    }
+
+    if let crate::json::Value::Object(depth_map) = &mut val {
+        for (_depth, paths_val) in depth_map.iter_mut() {
+            if let crate::json::Value::Object(paths) = paths_val {
+                for (p, size_val) in paths.iter_mut() {
+                    if p == path || p.starts_with(&format!("{}/", path)) {
+                        if let crate::json::Value::Number(n) = size_val {
+                            *n = 0.0;
+                        }
+                    }
+                }
+            }
+        }
+
+        if removed_size > 0 {
+            for (_, paths_val) in depth_map.iter_mut() {
+                if let crate::json::Value::Object(paths) = paths_val {
+                    for (p, size_val) in paths.iter_mut() {
+                        let is_parent = p != path && path.starts_with(&format!("{}/", p));
+                        if is_parent {
+                            if let crate::json::Value::Number(n) = size_val {
+                                let current = *n as i64;
+                                let new = (current - removed_size as i64).max(0);
+                                *n = new as f64;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let output_dir = crate::constants::get_output_dir();
+    fs::create_dir_all(&output_dir).unwrap_or_default();
+    let ts = crate::time::current_timestamp();
+    let dest = format!("{}/snapshot_{}.json", output_dir, ts);
+    fs::write(&dest, crate::json::stringify(&val)).map_err(|e| e.to_string())?;
+    Ok(dest)
+}
