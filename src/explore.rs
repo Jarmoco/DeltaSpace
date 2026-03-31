@@ -339,7 +339,12 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
                 .copied()
                 .unwrap_or(0)
                 .min(max_idx);
-            let scroll_offset = scroll_offset.min(rows.len().saturating_sub(available_rows));
+
+            let has_more_above = scroll_offset > 0;
+            let has_more_below = scroll_offset + available_rows < rows.len();
+            let indicator_rows = (has_more_above as usize) + (has_more_below as usize);
+            let data_rows = available_rows.saturating_sub(indicator_rows);
+            let scroll_offset = scroll_offset.min(rows.len().saturating_sub(data_rows));
 
             crate::terminal::clear();
             println!();
@@ -348,16 +353,27 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
             println!("  {}", "─".repeat(table_width()));
 
             let total_change = rows.iter().map(|(_, d, _)| d).sum::<i64>();
+            let has_more_above = scroll_offset > 0;
+            let has_more_below = scroll_offset + available_rows < rows.len();
 
             if rows.is_empty() {
                 println!("  (no changed sub-folders)");
             } else {
-                for (i, (path, d, cur)) in rows
+                if has_more_above {
+                    println!("  \x1b[90m↑ scroll up for more --\x1b[0m");
+                }
+
+                let indicator_rows = (has_more_above as usize) + (has_more_below as usize);
+                let data_rows = available_rows.saturating_sub(indicator_rows);
+
+                let visible_rows: Vec<_> = rows
                     .iter()
                     .enumerate()
                     .skip(scroll_offset)
-                    .take(available_rows)
-                {
+                    .take(data_rows)
+                    .collect();
+
+                for (i, (path, d, cur)) in visible_rows {
                     let name = Path::new(path)
                         .file_name()
                         .map(|n| n.to_string_lossy().into_owned())
@@ -392,6 +408,10 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
                         name,
                         reset,
                     );
+                }
+
+                if has_more_below {
+                    println!("  \x1b[90m-- scroll down for more ↓\x1b[0m");
                 }
             }
 
@@ -441,12 +461,31 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
             }
 
             let pending_count = pending_deletions.len();
-            let help_base = if pending_count > 0 {
-                format!("↑↓ move  → drill  ← back  g toggle chart   d: queue delete   x: delete({pending_count})   q quit")
+            let (help_base, help_extra): (String, Option<String>) = if !show_chart && chart_visible
+            {
+                let base = if pending_count > 0 {
+                    format!("↑↓ move  → drill  ← back  g toggle chart   d: queue delete   x: delete({pending_count})   q quit")
+                } else {
+                    "↑↓ move  → drill  ← back  g toggle chart   d: queue delete   q quit"
+                        .to_string()
+                };
+                (base, Some("Terminal too small for the chart".to_string()))
+            } else if pending_count > 0 {
+                (
+                    format!("↑↓ move  → drill  ← back  g toggle chart   d: queue delete   x: delete({pending_count})   q quit"),
+                    None,
+                )
             } else {
-                "↑↓ move  → drill  ← back  g toggle chart   d: queue delete   q quit".to_string()
+                (
+                    "↑↓ move  → drill  ← back  g toggle chart   d: queue delete   q quit"
+                        .to_string(),
+                    None,
+                )
             };
             println!("  {help_base}");
+            if let Some(extra) = help_extra {
+                println!("  \x1b[90m{}\x1b[0m", extra);
+            }
 
             let _ = std::io::stdout().flush();
 
@@ -464,11 +503,17 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
                 "\x1b[B" | "j" => {
                     let new_cur = (cur_idx + 1).min(max_idx);
                     cursors.insert(parent.clone(), new_cur);
-                    let new_scroll_end = scroll_offset + available_rows;
-                    if new_cur >= new_scroll_end {
+
+                    // Calculate data_rows assuming we're scrolled (has_more_above = true)
+                    let after_more_below = scroll_offset + available_rows < rows.len();
+                    let after_indicator = 1 + after_more_below as usize; // has_more_above always true after first scroll
+                    let after_data = available_rows.saturating_sub(after_indicator);
+
+                    if new_cur >= scroll_offset + after_data {
+                        let new_scroll = new_cur.saturating_sub(after_data) + 1;
                         scroll_offsets.insert(
                             parent,
-                            new_cur.saturating_sub(available_rows).saturating_add(1),
+                            new_scroll.min(rows.len().saturating_sub(after_data)),
                         );
                     }
                 }
