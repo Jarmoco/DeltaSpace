@@ -292,6 +292,7 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
 
         let mut stack: Vec<Option<String>> = vec![None];
         let mut cursors: HashMap<Option<String>, usize> = HashMap::new();
+        let mut scroll_offsets: HashMap<Option<String>, usize> = HashMap::new();
         let mut chart_visible = true;
 
         loop {
@@ -301,11 +302,44 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
             let max_idx = rows.len().saturating_sub(1);
             let cur_idx = cursors.get(&parent).copied().unwrap_or(0).min(max_idx);
 
-            let available_height = crate::terminal::get_height();
-            let base_lines = 7;
-            let chart_lines = CHART_ROWS + 2 + 2;
-            let required_with_chart = base_lines + rows.len() + chart_lines;
-            let show_chart = chart_visible && required_with_chart <= available_height;
+            let terminal_height = crate::terminal::get_height();
+            let header_lines = 4;
+            let separator_after_rows = 1;
+            let total_change_lines = if parent.is_none() { 2 } else { 0 };
+            let chart_block_lines = CHART_ROWS + 2;
+            let chart_separator = 1;
+            let help_lines = 1;
+
+            let available_rows_no_chart = terminal_height
+                .saturating_sub(
+                    header_lines + separator_after_rows + total_change_lines + help_lines,
+                )
+                .max(1);
+            let rows_count = rows.len().max(1);
+            let actual_rows = available_rows_no_chart.min(rows_count);
+
+            let min_chart_lines = chart_block_lines + chart_separator + help_lines;
+            let min_table_lines =
+                header_lines + separator_after_rows + actual_rows + total_change_lines + help_lines;
+            let show_chart = chart_visible && terminal_height >= min_table_lines + min_chart_lines;
+
+            let bottom_lines = if show_chart {
+                min_chart_lines
+            } else {
+                help_lines
+            };
+            let available_rows = terminal_height
+                .saturating_sub(
+                    header_lines + separator_after_rows + total_change_lines + bottom_lines,
+                )
+                .max(1);
+
+            let scroll_offset = scroll_offsets
+                .get(&parent)
+                .copied()
+                .unwrap_or(0)
+                .min(max_idx);
+            let scroll_offset = scroll_offset.min(rows.len().saturating_sub(available_rows));
 
             crate::terminal::clear();
             println!();
@@ -313,47 +347,52 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
             println!("  {:<14}  {:<12}  NAME", "CHANGE", "CURRENT");
             println!("  {}", "─".repeat(table_width()));
 
-            if rows.is_empty() {
-                println!("  (no changed sub-folders)");
-            }
-
             let total_change = rows.iter().map(|(_, d, _)| d).sum::<i64>();
 
-            for (i, (path, d, cur)) in rows.iter().enumerate() {
-                let name = Path::new(path)
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                let sel = if i == cur_idx { "\x1b[7m" } else { "" };
-                let reset = "\x1b[0m";
+            if rows.is_empty() {
+                println!("  (no changed sub-folders)");
+            } else {
+                for (i, (path, d, cur)) in rows
+                    .iter()
+                    .enumerate()
+                    .skip(scroll_offset)
+                    .take(available_rows)
+                {
+                    let name = Path::new(path)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    let sel = if i == cur_idx { "\x1b[7m" } else { "" };
+                    let reset = "\x1b[0m";
 
-                let is_queued = pending_deletions.iter().any(|p| p == path);
-                let color = if is_queued {
-                    "\x1b[93m"
-                } else if *d > 0 {
-                    "\x1b[92m"
-                } else {
-                    "\x1b[91m"
-                };
-                let sign_out = if is_queued {
-                    '!'
-                } else if *d > 0 {
-                    '+'
-                } else {
-                    '-'
-                };
+                    let is_queued = pending_deletions.iter().any(|p| p == path);
+                    let color = if is_queued {
+                        "\x1b[93m"
+                    } else if *d > 0 {
+                        "\x1b[92m"
+                    } else {
+                        "\x1b[91m"
+                    };
+                    let sign_out = if is_queued {
+                        '!'
+                    } else if *d > 0 {
+                        '+'
+                    } else {
+                        '-'
+                    };
 
-                println!(
-                    "  {}{}{}{:<13}{}  {:<12}  {}{}",
-                    sel,
-                    color,
-                    sign_out,
-                    crate::terminal::fmt_size(d.unsigned_abs() as f64),
-                    reset,
-                    crate::terminal::fmt_size(*cur as f64),
-                    name,
-                    reset,
-                );
+                    println!(
+                        "  {}{}{}{:<13}{}  {:<12}  {}{}",
+                        sel,
+                        color,
+                        sign_out,
+                        crate::terminal::fmt_size(d.unsigned_abs() as f64),
+                        reset,
+                        crate::terminal::fmt_size(*cur as f64),
+                        name,
+                        reset,
+                    );
+                }
             }
 
             println!("  {}", "─".repeat(table_width()));
@@ -375,6 +414,21 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
             }
 
             if show_chart {
+                let lines_used = header_lines
+                    + separator_after_rows
+                    + rows
+                        .iter()
+                        .enumerate()
+                        .skip(scroll_offset)
+                        .take(available_rows)
+                        .count()
+                    + total_change_lines
+                    + if rows.is_empty() { 1 } else { 0 };
+                let filler = terminal_height.saturating_sub(lines_used + bottom_lines);
+                for _ in 0..filler {
+                    println!();
+                }
+
                 let chart_path = if !rows.is_empty() {
                     rows[cur_idx].0
                 } else {
@@ -401,10 +455,22 @@ pub fn cmd_explore(idx_a: usize, mut idx_b: usize) {
                     return;
                 }
                 "\x1b[A" | "k" => {
-                    cursors.insert(parent, cur_idx.saturating_sub(1));
+                    let new_cur = cur_idx.saturating_sub(1);
+                    cursors.insert(parent.clone(), new_cur);
+                    if new_cur < scroll_offset {
+                        scroll_offsets.insert(parent, new_cur);
+                    }
                 }
                 "\x1b[B" | "j" => {
-                    cursors.insert(parent, (cur_idx + 1).min(max_idx));
+                    let new_cur = (cur_idx + 1).min(max_idx);
+                    cursors.insert(parent.clone(), new_cur);
+                    let new_scroll_end = scroll_offset + available_rows;
+                    if new_cur >= new_scroll_end {
+                        scroll_offsets.insert(
+                            parent,
+                            new_cur.saturating_sub(available_rows).saturating_add(1),
+                        );
+                    }
                 }
                 "\x1b[C" | "\r" | "\n" | "l" if !rows.is_empty() => {
                     cursors.insert(parent.clone(), cur_idx);
