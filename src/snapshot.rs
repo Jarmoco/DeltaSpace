@@ -171,7 +171,7 @@ pub fn cmd_show(idx: usize, as_json: bool) -> HashMap<String, u64> {
     data
 }
 
-pub fn apply_deletion(snapshot_idx: usize, path: &str) -> Result<String, String> {
+pub fn apply_deletions(snapshot_idx: usize, paths: &[String]) -> Result<String, String> {
     let files = cmd_list(false);
     if snapshot_idx >= files.len() {
         return Err("Invalid snapshot index".to_string());
@@ -181,13 +181,17 @@ pub fn apply_deletion(snapshot_idx: usize, path: &str) -> Result<String, String>
     let raw = fs::read_to_string(source_filepath).map_err(|e| e.to_string())?;
     let mut val = crate::json::parse(&raw).map_err(|e| e.to_string())?;
 
-    let mut removed_size = 0u64;
+    let mut path_sizes: Vec<(String, u64)> = Vec::new();
+
     if let crate::json::Value::Object(depth_map) = &val {
         for (_depth, paths_val) in depth_map {
-            if let crate::json::Value::Object(paths) = paths_val {
-                if let Some(crate::json::Value::Number(n)) = paths.get(path) {
-                    removed_size = *n as u64;
-                    break;
+            if let crate::json::Value::Object(paths_obj) = paths_val {
+                for (p, size_val) in paths_obj {
+                    if paths.contains(p) {
+                        if let crate::json::Value::Number(n) = size_val {
+                            path_sizes.push((p.clone(), *n as u64));
+                        }
+                    }
                 }
             }
         }
@@ -195,9 +199,13 @@ pub fn apply_deletion(snapshot_idx: usize, path: &str) -> Result<String, String>
 
     if let crate::json::Value::Object(depth_map) = &mut val {
         for (_depth, paths_val) in depth_map.iter_mut() {
-            if let crate::json::Value::Object(paths) = paths_val {
-                for (p, size_val) in paths.iter_mut() {
-                    if p == path || p.starts_with(&format!("{}/", path)) {
+            if let crate::json::Value::Object(paths_obj) = paths_val {
+                for (p, size_val) in paths_obj.iter_mut() {
+                    let is_target = paths.contains(p);
+                    let is_child = paths
+                        .iter()
+                        .any(|target| p.starts_with(&format!("{}/", target)));
+                    if is_target || is_child {
                         if let crate::json::Value::Number(n) = size_val {
                             *n = 0.0;
                         }
@@ -206,15 +214,16 @@ pub fn apply_deletion(snapshot_idx: usize, path: &str) -> Result<String, String>
             }
         }
 
-        if removed_size > 0 {
+        for (removed_path, removed_size) in &path_sizes {
             for (_, paths_val) in depth_map.iter_mut() {
-                if let crate::json::Value::Object(paths) = paths_val {
-                    for (p, size_val) in paths.iter_mut() {
-                        let is_parent = p != path && path.starts_with(&format!("{}/", p));
+                if let crate::json::Value::Object(paths_obj) = paths_val {
+                    for (p, size_val) in paths_obj.iter_mut() {
+                        let is_parent =
+                            p != removed_path && removed_path.starts_with(&format!("{}/", p));
                         if is_parent {
                             if let crate::json::Value::Number(n) = size_val {
                                 let current = *n as i64;
-                                let new = (current - removed_size as i64).max(0);
+                                let new = (current - *removed_size as i64).max(0);
                                 *n = new as f64;
                             }
                         }
