@@ -1,148 +1,15 @@
 /* -----------------------------------------------------------------------------
- * Minimal JSON Parser/Serializer
- *
- * WHY: Self-contained JSON handling avoids external dependencies (Radical
- * Self-Containment). This is a lightweight parser sufficient for snapshot
- * storage—full RFC 8259 compliance isn't needed.
- *
- * The Value enum provides complete variant coverage (Null, Bool, Number, String,
- * Array, Object) to support future API extensibility without breaking changes.
- * The extra accessors (as_bool, as_f64, etc.) are kept for clarity and may be
- * useful as the codebase evolves.
+ * json/parser.rs
+ * Recursive-descent JSON parser supporting strings, numbers, booleans,
+ * null, arrays, objects, and unicode surrogate pairs.
  * -------------------------------------------------------------------------- */
 
 use std::collections::HashMap;
 use std::fmt;
 
-/* --- Value --- */
+use super::value::Value;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Value {
-    Null,
-    Bool(bool),
-    Number(f64),
-    String(String),
-    Array(Vec<Value>),
-    Object(HashMap<String, Value>),
-}
-
-#[allow(dead_code)]
-impl Value {
-    pub fn as_bool(&self) -> Option<bool> {
-        if let Value::Bool(b) = self {
-            Some(*b)
-        } else {
-            None
-        }
-    }
-
-    pub fn as_f64(&self) -> Option<f64> {
-        if let Value::Number(n) = self {
-            Some(*n)
-        } else {
-            None
-        }
-    }
-
-    pub fn as_i64(&self) -> Option<i64> {
-        self.as_f64().map(|n| n as i64)
-    }
-
-    pub fn as_str(&self) -> Option<&str> {
-        if let Value::String(s) = self {
-            Some(s)
-        } else {
-            None
-        }
-    }
-
-    pub fn as_array(&self) -> Option<&Vec<Value>> {
-        if let Value::Array(a) = self {
-            Some(a)
-        } else {
-            None
-        }
-    }
-
-    pub fn as_object(&self) -> Option<&HashMap<String, Value>> {
-        if let Value::Object(o) = self {
-            Some(o)
-        } else {
-            None
-        }
-    }
-
-    pub fn is_null(&self) -> bool {
-        matches!(self, Value::Null)
-    }
-
-    pub fn get(&self, key: &str) -> Option<&Value> {
-        match self {
-            Value::Object(map) => map.get(key),
-            Value::Array(arr) => key.parse::<usize>().ok().and_then(|i| arr.get(i)),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Value::Null => write!(f, "null"),
-            Value::Bool(b) => write!(f, "{b}"),
-            Value::Number(n) => {
-                if n.fract() == 0.0 && n.abs() < 1e15 {
-                    write!(f, "{}", *n as i64)
-                } else {
-                    write!(f, "{n}")
-                }
-            }
-            Value::String(s) => write!(f, "\"{}\"", escape(s)),
-            Value::Array(arr) => {
-                write!(f, "[")?;
-                for (i, v) in arr.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ",")?;
-                    }
-                    write!(f, "{v}")?;
-                }
-                write!(f, "]")
-            }
-            Value::Object(map) => {
-                write!(f, "{{")?;
-                for (i, (k, v)) in map.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ",")?;
-                    }
-                    write!(f, "\"{}\":{v}", escape(k))?;
-                }
-                write!(f, "}}")
-            }
-        }
-    }
-}
-
-/* --- escape helper --- */
-
-fn escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => {
-                let _ = fmt::write(&mut out, format_args!("\\u{:04x}", c as u32));
-            }
-            c => out.push(c),
-        }
-    }
-    out
-}
-
-/* --- Error --- */
+// Error
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParseError {
@@ -160,43 +27,43 @@ impl std::error::Error for ParseError {}
 
 pub type Result<T> = std::result::Result<T, ParseError>;
 
-/* --- Parser --- */
+// Parser
 
 struct Parser<'a> {
-    src: &'a [u8],
-    pos: usize,
+    source: &'a [u8],
+    position: usize,
 }
 
 impl<'a> Parser<'a> {
     fn new(src: &'a str) -> Self {
         Parser {
-            src: src.as_bytes(),
-            pos: 0,
+            source: src.as_bytes(),
+            position: 0,
         }
     }
 
     fn err(&self, msg: &str) -> ParseError {
         ParseError {
             message: msg.to_string(),
-            pos: self.pos,
+            pos: self.position,
         }
     }
 
     fn peek(&self) -> Option<u8> {
-        self.src.get(self.pos).copied()
+        self.source.get(self.position).copied()
     }
 
     fn bump(&mut self) -> Option<u8> {
-        let b = self.src.get(self.pos).copied();
+        let b = self.source.get(self.position).copied();
         if b.is_some() {
-            self.pos += 1;
+            self.position += 1;
         }
         b
     }
 
     fn expect(&mut self, byte: u8) -> Result<()> {
         if self.peek() == Some(byte) {
-            self.pos += 1;
+            self.position += 1;
             Ok(())
         } else {
             Err(self.err(&format!("expected '{}'", byte as char)))
@@ -205,20 +72,20 @@ impl<'a> Parser<'a> {
 
     fn skip_ws(&mut self) {
         while matches!(self.peek(), Some(b' ' | b'\t' | b'\n' | b'\r')) {
-            self.pos += 1;
+            self.position += 1;
         }
     }
 
-    fn eat_literal(&mut self, lit: &[u8]) -> bool {
-        if self.src.get(self.pos..self.pos + lit.len()) == Some(lit) {
-            self.pos += lit.len();
+    fn matches_literal(&mut self, lit: &[u8]) -> bool {
+        if self.source.get(self.position..self.position + lit.len()) == Some(lit) {
+            self.position += lit.len();
             true
         } else {
             false
         }
     }
 
-    /* --- parse dispatch --- */
+    // Parse Dispatch
 
     fn parse_value(&mut self) -> Result<Value> {
         self.skip_ws();
@@ -230,21 +97,21 @@ impl<'a> Parser<'a> {
             b'{' => self.parse_object(),
             b'[' => self.parse_array(),
             b't' => {
-                if self.eat_literal(b"true") {
+                if self.matches_literal(b"true") {
                     Ok(Value::Bool(true))
                 } else {
                     Err(self.err("invalid token"))
                 }
             }
             b'f' => {
-                if self.eat_literal(b"false") {
+                if self.matches_literal(b"false") {
                     Ok(Value::Bool(false))
                 } else {
                     Err(self.err("invalid token"))
                 }
             }
             b'n' => {
-                if self.eat_literal(b"null") {
+                if self.matches_literal(b"null") {
                     Ok(Value::Null)
                 } else {
                     Err(self.err("invalid token"))
@@ -255,7 +122,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /* --- string --- */
+    // String
 
     fn parse_string(&mut self) -> Result<String> {
         self.expect(b'"')?;
@@ -288,7 +155,7 @@ impl<'a> Parser<'a> {
                             self.err("high surrogate must be followed by \\uXXXX low surrogate")
                         );
                     }
-                    self.pos += 1; // consume '\'
+                    self.position += 1; // consume '\'
                     if self.bump() != Some(b'u') {
                         return Err(self.err("expected \\u after high surrogate"));
                     }
@@ -328,26 +195,26 @@ impl<'a> Parser<'a> {
         Ok(buf)
     }
 
-    /* --- number --- */
+    // Number
 
     fn parse_number(&mut self) -> Result<Value> {
-        let start = self.pos;
+        let start = self.position;
         if self.peek() == Some(b'-') {
-            self.pos += 1;
+            self.position += 1;
         }
         self.eat_digits();
         if self.peek() == Some(b'.') {
-            self.pos += 1;
+            self.position += 1;
             self.eat_digits();
         }
         if matches!(self.peek(), Some(b'e' | b'E')) {
-            self.pos += 1;
+            self.position += 1;
             if matches!(self.peek(), Some(b'+' | b'-')) {
-                self.pos += 1;
+                self.position += 1;
             }
             self.eat_digits();
         }
-        let slice = std::str::from_utf8(&self.src[start..self.pos])
+        let slice = std::str::from_utf8(&self.source[start..self.position])
             .map_err(|_| self.err("invalid number bytes"))?;
         slice
             .parse::<f64>()
@@ -357,18 +224,18 @@ impl<'a> Parser<'a> {
 
     fn eat_digits(&mut self) {
         while matches!(self.peek(), Some(b'0'..=b'9')) {
-            self.pos += 1;
+            self.position += 1;
         }
     }
 
-    /* --- array --- */
+    // Array
 
     fn parse_array(&mut self) -> Result<Value> {
         self.expect(b'[')?;
         let mut arr = Vec::new();
         self.skip_ws();
         if self.peek() == Some(b']') {
-            self.pos += 1;
+            self.position += 1;
             return Ok(Value::Array(arr));
         }
         loop {
@@ -382,14 +249,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /* --- object --- */
+    // Object
 
     fn parse_object(&mut self) -> Result<Value> {
         self.expect(b'{')?;
         let mut map = HashMap::new();
         self.skip_ws();
         if self.peek() == Some(b'}') {
-            self.pos += 1;
+            self.position += 1;
             return Ok(Value::Object(map));
         }
         loop {
@@ -409,14 +276,14 @@ impl<'a> Parser<'a> {
     }
 }
 
-/* --- public API --- */
+// Public API
 
 /// Parse a JSON string into a [`Value`].
 pub fn parse(src: &str) -> Result<Value> {
     let mut p = Parser::new(src);
     let v = p.parse_value()?;
     p.skip_ws();
-    if p.pos != p.src.len() {
+    if p.position != p.source.len() {
         return Err(p.err("trailing content after JSON value"));
     }
     Ok(v)
@@ -427,7 +294,7 @@ pub fn stringify(v: &Value) -> String {
     v.to_string()
 }
 
-/* --- tests --- */
+// Tests
 
 #[cfg(test)]
 mod tests {
