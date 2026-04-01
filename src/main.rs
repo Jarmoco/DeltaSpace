@@ -28,6 +28,15 @@ mod utils;
 
 use std::io::Write;
 
+/* --- Constants -------------------------------------------------------------- */
+
+const MENU_ITEMS: &[&str] = &[
+    "Scan filesystem → snapshot",
+    "Compare snapshots (interactive)",
+    "Prune snapshots",
+    "Quit",
+];
+
 /* --- CLI parsing ------------------------------------------------------------ */
 
 enum CliCommand {
@@ -117,57 +126,110 @@ fn parse_cli_args(args: &[String]) -> CliCommand {
     }
 }
 
-/* --- interactive menu ------------------------------------------------------- */
+/* --- Menu rendering --------------------------------------------------------- */
+
+fn render_menu(cursor: usize) {
+    terminal::clear();
+    println!();
+    println!("  DeltaSpace");
+    println!();
+    let mut i = 0;
+    while i < MENU_ITEMS.len() {
+        if i == cursor {
+            println!("  \x1b[7m▸\x1b[0m\x1b[7m{}\x1b[0m", menu_label(i));
+        } else {
+            println!("   {}", menu_label(i));
+        }
+        i += 1;
+    }
+    println!();
+    println!("  \x1b[2m↑↓/j/k: navigate   Enter: select   1-3: quick select   q: quit\x1b[0m");
+    println!();
+    let _ = std::io::stdout().flush();
+}
+
+fn menu_label(index: usize) -> String {
+    if index == 3 {
+        format!("[q] {}", MENU_ITEMS[index])
+    } else {
+        format!("[{}] {}", index + 1, MENU_ITEMS[index])
+    }
+}
+
+/* --- Menu actions ----------------------------------------------------------- */
+
+fn execute_menu_action(index: usize) {
+    match index {
+        0 => {
+            terminal::clear();
+            snapshot::cmd_scan(true);
+            utils::pause();
+        }
+        1 => {
+            terminal::clear();
+            let files = snapshot::cmd_list(false);
+            if files.len() < 2 {
+                println!("Need ≥ 2 snapshots in {}.", constants::get_output_dir());
+                utils::pause();
+                return;
+            }
+            if let Some((base_idx, comp_idx)) = selector::select_snapshot_pair(&files) {
+                explore::cmd_explore(base_idx, comp_idx);
+            }
+        }
+        2 => {
+            terminal::clear();
+            prune::cmd_prune();
+        }
+        _ => {}
+    }
+}
+
+/* --- Interactive menu ------------------------------------------------------- */
 
 fn interactive_menu() {
     terminal::enter_alternate_screen();
 
+    let mut menu_cursor: usize = 0;
+
     loop {
-        terminal::clear();
-        println!();
-        println!("  DeltaSpace");
-        println!("  [1] Scan filesystem → snapshot");
-        println!("  [2] Compare snapshots (interactive)");
-        println!("  [3] Prune snapshots");
-        println!("  [q] Quit");
-        println!();
-        let _ = std::io::stdout().flush();
+        render_menu(menu_cursor);
 
         match terminal::getch().as_str() {
+            "\x1b[A" | "k" => {
+                menu_cursor = menu_cursor.saturating_sub(1);
+            }
+            "\x1b[B" | "j" => {
+                let max = MENU_ITEMS.len() - 1;
+                menu_cursor = (menu_cursor + 1).min(max);
+            }
+            "\r" | "\n" => {
+                if menu_cursor == 3 {
+                    break;
+                }
+                execute_menu_action(menu_cursor);
+            }
             "1" => {
-                terminal::clear();
-                snapshot::cmd_scan(true);
-                utils::pause();
+                execute_menu_action(0);
             }
             "2" => {
-                terminal::clear();
-                let files = snapshot::cmd_list(false);
-
-                if files.len() < 2 {
-                    println!("Need ≥ 2 snapshots in {}.", constants::get_output_dir());
-                    utils::pause();
-                    continue;
-                }
-
-                if let Some((base_idx, comp_idx)) = selector::select_snapshot_pair(&files) {
-                    explore::cmd_explore(base_idx, comp_idx);
-                }
+                execute_menu_action(1);
             }
             "3" => {
-                terminal::clear();
-                prune::cmd_prune();
+                execute_menu_action(2);
             }
             "q" | "Q" | "\x03" => {
-                terminal::exit_alternate_screen();
-                terminal::tty_restore();
-                terminal::clear();
-                println!("Bye!");
-                println!();
                 break;
             }
             _ => {}
         }
     }
+
+    terminal::exit_alternate_screen();
+    terminal::tty_restore();
+    terminal::clear();
+    println!("Bye!");
+    println!();
 }
 
 /* --- entry point ------------------------------------------------------------ */
