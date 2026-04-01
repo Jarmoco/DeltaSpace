@@ -1,4 +1,12 @@
+/* -----------------------------------------------------------------------------
+ * terminal/linux.rs
+ * Linux-specific termios configuration for raw TTY mode, including
+ * constants, FFI bindings, and thread-local terminal state management.
+ * -------------------------------------------------------------------------- */
+
 use std::os::unix::io::AsRawFd;
+
+/* --- Constants ------------------------------------------------------------ */
 
 pub const TCSANOW: i32 = 0;
 pub const ICANON: u32 = 0o0002;
@@ -26,6 +34,8 @@ pub struct termios {
     pub c_ospeed: speed_t,
 }
 
+/* --- FFI ------------------------------------------------------------------ */
+
 unsafe extern "C" {
     pub fn tcgetattr(fd: i32, termios_p: *mut termios) -> i32;
     pub fn tcsetattr(fd: i32, opt: i32, termios_p: *const termios) -> i32;
@@ -34,9 +44,13 @@ unsafe extern "C" {
 unsafe impl Send for termios {}
 unsafe impl Sync for termios {}
 
+/* --- State ---------------------------------------------------------------- */
+
 thread_local! {
     static ORIGINAL_TERMIOS: std::cell::RefCell<Option<termios>> = const { std::cell::RefCell::new(None) };
 }
+
+/* --- TTY Control ---------------------------------------------------------- */
 
 pub fn tty_raw() {
     let fd = match super::tty_fd() {

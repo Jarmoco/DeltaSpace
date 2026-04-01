@@ -47,7 +47,7 @@ pub fn cmd_scan(verbose: bool) -> String {
     }
 
     let value = crate::json_utils::layers_to_json_value(&layers);
-    let ts = crate::time::current_timestamp();
+    let ts = crate::time::get_current_timestamp();
     let dest = format!("{}/snapshot_{}.json", output_dir, ts);
     fs::write(&dest, crate::json::stringify(&value)).expect("failed to write snapshot");
 
@@ -60,17 +60,20 @@ pub fn cmd_scan(verbose: bool) -> String {
 pub fn cmd_list(as_json: bool) -> Vec<String> {
     let output_dir = crate::constants::get_output_dir();
     let mut files: Vec<String> = match fs::read_dir(&output_dir) {
-        Ok(rd) => rd
-            .flatten()
-            .filter_map(|e| {
-                let name = e.file_name().to_string_lossy().into_owned();
+        Ok(rd) => {
+            let mut result = Vec::new();
+            for entry in rd {
+                let entry = match entry {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                let name = entry.file_name().to_string_lossy().into_owned();
                 if name.starts_with("snapshot_") && name.ends_with(".json") {
-                    Some(e.path().to_string_lossy().into_owned())
-                } else {
-                    None
+                    result.push(entry.path().to_string_lossy().into_owned());
                 }
-            })
-            .collect(),
+            }
+            result
+        }
         Err(_) => vec![],
     };
     files.sort();
@@ -120,9 +123,9 @@ pub fn build_diff(file_a: &str, file_b: &str) -> HashMap<String, (i64, u64)> {
     let mut diff = HashMap::new();
     let all_keys: std::collections::HashSet<&String> = a.keys().chain(b.keys()).collect();
     for path in all_keys {
-        let va = *a.get(path).unwrap_or(&0) as i64;
-        let vb = *b.get(path).unwrap_or(&0) as i64;
-        let d = vb - va;
+        let value_a = *a.get(path).unwrap_or(&0) as i64;
+        let value_b = *b.get(path).unwrap_or(&0) as i64;
+        let d = value_b - value_a;
         if d != 0 {
             diff.insert(path.clone(), (d, *b.get(path).unwrap_or(&0)));
         }
@@ -132,10 +135,14 @@ pub fn build_diff(file_a: &str, file_b: &str) -> HashMap<String, (i64, u64)> {
 
 /* --- commands: diff & show --- */
 
-pub fn cmd_diff(idx_a: usize, idx_b: usize, as_json: bool) -> HashMap<String, (i64, u64)> {
+pub fn cmd_diff(
+    baseline_index: usize,
+    comparison_index: usize,
+    as_json: bool,
+) -> HashMap<String, (i64, u64)> {
     let files = cmd_list(false);
-    crate::utils::check_indices(&files, &[idx_a, idx_b]);
-    let diff = build_diff(&files[idx_a], &files[idx_b]);
+    crate::utils::check_indices(&files, &[baseline_index, comparison_index]);
+    let diff = build_diff(&files[baseline_index], &files[comparison_index]);
     if as_json {
         println!(
             "{}",
@@ -235,7 +242,7 @@ pub fn apply_deletions(snapshot_idx: usize, paths: &[String]) -> Result<String, 
 
     let output_dir = crate::constants::get_output_dir();
     fs::create_dir_all(&output_dir).unwrap_or_default();
-    let ts = crate::time::current_timestamp();
+    let ts = crate::time::get_current_timestamp();
     let dest = format!("{}/snapshot_{}.json", output_dir, ts);
     fs::write(&dest, crate::json::stringify(&val)).map_err(|e| e.to_string())?;
     Ok(dest)

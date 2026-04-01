@@ -28,6 +28,97 @@ mod utils;
 
 use std::io::Write;
 
+/* --- CLI parsing ------------------------------------------------------------ */
+
+enum CliCommand {
+    Scan,
+    List,
+    Show {
+        idx: usize,
+    },
+    Diff {
+        first_index: usize,
+        second_index: usize,
+    },
+    Explore {
+        first_index: usize,
+        second_index: usize,
+    },
+    Help,
+}
+
+fn print_help() {
+    println!(
+        "deltaspace — filesystem snapshot & diff explorer
+
+Usage (interactive):  ./deltaspace
+Usage (CLI API):      ./deltaspace <command> [args]
+
+Commands:
+  scan                        Scan filesystem and save a snapshot
+  list                        List available snapshots as JSON
+  diff  <old_idx> <new_idx>   Print diff between two snapshots as JSON
+                              (old_idx < new_idx is enforced)
+  show  <idx>                 Print a snapshot as flat JSON
+  explore <old_idx> <new_idx> Open the interactive diff explorer
+                              (old_idx < new_idx is enforced)
+
+Exit codes: 0 success, 1 error, 2 bad arguments"
+    );
+}
+
+fn parse_cli_args(args: &[String]) -> CliCommand {
+    match args[1].as_str() {
+        "scan" => CliCommand::Scan,
+        "list" => CliCommand::List,
+        "show" => {
+            if args.len() < 3 {
+                utils::die("Usage: deltaspace show <idx>", 2);
+            }
+            let idx: usize = args[2]
+                .parse()
+                .unwrap_or_else(|_| utils::die("idx must be an integer", 2));
+            CliCommand::Show { idx }
+        }
+        "diff" => {
+            if args.len() < 4 {
+                utils::die("Usage: deltaspace diff <old_idx> <new_idx>", 2);
+            }
+            let first_index: usize = args[2]
+                .parse()
+                .unwrap_or_else(|_| utils::die("old_idx must be an integer", 2));
+            let second_index: usize = args[3]
+                .parse()
+                .unwrap_or_else(|_| utils::die("new_idx must be an integer", 2));
+            CliCommand::Diff {
+                first_index,
+                second_index,
+            }
+        }
+        "explore" => {
+            if args.len() < 4 {
+                utils::die("Usage: deltaspace explore <old_idx> <new_idx>", 2);
+            }
+            let first_index: usize = args[2]
+                .parse()
+                .unwrap_or_else(|_| utils::die("old_idx must be an integer", 2));
+            let second_index: usize = args[3]
+                .parse()
+                .unwrap_or_else(|_| utils::die("new_idx must be an integer", 2));
+            CliCommand::Explore {
+                first_index,
+                second_index,
+            }
+        }
+        "-h" | "--help" => CliCommand::Help,
+        unknown => {
+            utils::die(&format!("Unknown command '{}'. Try --help", unknown), 2);
+        }
+    }
+}
+
+/* --- interactive menu ------------------------------------------------------- */
+
 fn interactive_menu() {
     terminal::enter_alternate_screen();
 
@@ -79,6 +170,8 @@ fn interactive_menu() {
     }
 }
 
+/* --- entry point ------------------------------------------------------------ */
+
 fn main() {
     std::panic::set_hook(Box::new(|_| {
         terminal::exit_alternate_screen();
@@ -96,69 +189,35 @@ fn main() {
         return;
     }
 
-    match args[1].as_str() {
-        "scan" => {
+    match parse_cli_args(&args) {
+        CliCommand::Scan => {
             println!("{}", snapshot::cmd_scan(false));
         }
-        "list" => {
+        CliCommand::List => {
             snapshot::cmd_list(true);
         }
-        "show" => {
-            if args.len() < 3 {
-                utils::die("Usage: deltaspace show <idx>", 2);
-            }
-            let idx: usize = args[2]
-                .parse()
-                .unwrap_or_else(|_| utils::die("idx must be an integer", 2));
+        CliCommand::Show { idx } => {
             snapshot::cmd_show(idx, true);
         }
-        "diff" => {
-            if args.len() < 4 {
-                utils::die("Usage: deltaspace diff <old_idx> <new_idx>", 2);
-            }
-            let a: usize = args[2]
-                .parse()
-                .unwrap_or_else(|_| utils::die("old_idx must be an integer", 2));
-            let b: usize = args[3]
-                .parse()
-                .unwrap_or_else(|_| utils::die("new_idx must be an integer", 2));
-            snapshot::cmd_diff(a, b, true);
+        CliCommand::Diff {
+            first_index,
+            second_index,
+        } => {
+            snapshot::cmd_diff(first_index, second_index, true);
         }
-        "explore" => {
-            if args.len() < 4 {
-                utils::die("Usage: deltaspace explore <old_idx> <new_idx>", 2);
-            }
-            let a: usize = args[2]
-                .parse()
-                .unwrap_or_else(|_| utils::die("old_idx must be an integer", 2));
-            let b: usize = args[3]
-                .parse()
-                .unwrap_or_else(|_| utils::die("new_idx must be an integer", 2));
-            // Ensure the baseline index is less than the comparison index
-            let (base_idx, comp_idx) = if a < b { (a, b) } else { (b, a) };
+        CliCommand::Explore {
+            first_index,
+            second_index,
+        } => {
+            let (base_idx, comp_idx) = if first_index < second_index {
+                (first_index, second_index)
+            } else {
+                (second_index, first_index)
+            };
             explore::cmd_explore(base_idx, comp_idx);
         }
-        "-h" | "--help" => {
-            println!(
-                "deltaspace — filesystem snapshot & diff explorer
-
-Usage (interactive):  ./deltaspace
-Usage (CLI API):      ./deltaspace <command> [args]
-
-Commands:
-  scan                        Scan filesystem and save a snapshot
-  list                        List available snapshots as JSON
-  diff  <old_idx> <new_idx>   Print diff between two snapshots as JSON
-                              (old_idx < new_idx is enforced)
-  show  <idx>                 Print a snapshot as flat JSON
-  explore <old_idx> <new_idx> Open the interactive diff explorer
-                              (old_idx < new_idx is enforced)
-
-Exit codes: 0 success, 1 error, 2 bad arguments"
-            );
-        }
-        unknown => {
-            utils::die(&format!("Unknown command '{}'. Try --help", unknown), 2);
+        CliCommand::Help => {
+            print_help();
         }
     }
 }

@@ -22,10 +22,13 @@ pub fn layers_to_json_value(layers: &HashMap<String, HashMap<String, u64>>) -> c
 
 pub fn diff_to_json_value(diff: &HashMap<String, (i64, u64)>) -> crate::json::Value {
     let mut obj = HashMap::new();
-    for (path, &(d, cur)) in diff {
+    for (path, &(d, current_size)) in diff {
         let mut entry = HashMap::new();
         entry.insert("diff".to_string(), crate::json::Value::Number(d as f64));
-        entry.insert("cur".to_string(), crate::json::Value::Number(cur as f64));
+        entry.insert(
+            "current".to_string(),
+            crate::json::Value::Number(current_size as f64),
+        );
         obj.insert(path.clone(), crate::json::Value::Object(entry));
     }
     crate::json::Value::Object(obj)

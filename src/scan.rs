@@ -22,12 +22,12 @@ pub fn scan(root: &str) -> HashMap<String, u64> {
     let mut counter: u64 = 0;
 
     /* Pass 1 - collect directories */
-    while let Some(cur) = stack.pop() {
-        if crate::constants::is_excluded(&cur) {
+    while let Some(current_path) = stack.pop() {
+        if crate::constants::is_excluded(&current_path) {
             continue;
         }
-        order.push(cur.clone());
-        if let Ok(rd) = fs::read_dir(&cur) {
+        order.push(current_path.clone());
+        if let Ok(rd) = fs::read_dir(&current_path) {
             for entry in rd.flatten() {
                 let meta = match entry.metadata() {
                     Ok(m) => m,
@@ -44,9 +44,9 @@ pub fn scan(root: &str) -> HashMap<String, u64> {
     }
 
     /* Pass 2 - compute sizes bottom-up */
-    for cur in order.iter().rev() {
+    for current_path in order.iter().rev() {
         let mut total: u64 = 0;
-        if let Ok(rd) = fs::read_dir(cur) {
+        if let Ok(rd) = fs::read_dir(current_path) {
             for entry in rd.flatten() {
                 let meta = match entry.metadata() {
                     Ok(m) => m,
@@ -63,10 +63,10 @@ pub fn scan(root: &str) -> HashMap<String, u64> {
                 }
             }
         }
-        sizes.insert(cur.clone(), total);
+        sizes.insert(current_path.clone(), total);
         counter += 1;
         if counter % 200 == 0 {
-            let base = Path::new(cur)
+            let base = Path::new(current_path)
                 .file_name()
                 .map(|n| n.to_string_lossy())
                 .unwrap_or_default();

@@ -20,10 +20,14 @@ mod macos;
 
 mod signal;
 
+/* --- Constants ------------------------------------------------------------ */
+
 pub static ALTERNATE_MODE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 pub use signal::init_signal_handler;
+
+/* --- FFI ------------------------------------------------------------------ */
 
 #[repr(C)]
 struct winsize {
@@ -45,6 +49,8 @@ const STDOUT_FILENO: i32 = 1;
 unsafe extern "C" {
     fn ioctl(fd: i32, request: u64, ...) -> i32;
 }
+
+/* --- Size Queries --------------------------------------------------------- */
 
 fn get_terminal_size_impl(fd: i32) -> Option<(usize, usize)> {
     unsafe {
@@ -75,6 +81,8 @@ pub fn init_terminal_size() {
     let _ = get_width();
     let _ = get_height();
 }
+
+/* --- TTY Control ---------------------------------------------------------- */
 
 pub fn tty_fd() -> Option<std::fs::File> {
     fs::OpenOptions::new()
@@ -118,6 +126,8 @@ pub fn getch() -> String {
     String::from_utf8_lossy(&result).into_owned()
 }
 
+/* --- Screen Control ------------------------------------------------------- */
+
 pub fn clear() {
     print!("\x1b[H\x1b[2J");
     let _ = io::stdout().flush();
@@ -134,6 +144,8 @@ pub fn exit_alternate_screen() {
     let _ = io::stdout().flush();
     ALTERNATE_MODE.store(false, Ordering::SeqCst);
 }
+
+/* --- Formatting ----------------------------------------------------------- */
 
 pub fn fmt_size(mut n: f64) -> String {
     for unit in &["B", "KB", "MB", "GB", "TB"] {

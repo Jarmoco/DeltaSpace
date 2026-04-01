@@ -14,7 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /* --- primary API --- */
 
-pub fn local_now() -> (i64, u32, u32, u32, u32) {
+pub fn get_local_time() -> (i64, u32, u32, u32, u32) {
     let out = std::process::Command::new("date")
         .arg("+%Y %m %d %H %M")
         .output()
@@ -22,16 +22,16 @@ pub fn local_now() -> (i64, u32, u32, u32, u32) {
         .and_then(|o| String::from_utf8(o.stdout).ok());
 
     if let Some(s) = out {
-        let p: Vec<&str> = s.trim().split_whitespace().collect();
-        if p.len() == 5 {
-            if let (Ok(y), Ok(mo), Ok(d), Ok(h), Ok(mi)) = (
-                p[0].parse::<i64>(),
-                p[1].parse::<u32>(),
-                p[2].parse::<u32>(),
-                p[3].parse::<u32>(),
-                p[4].parse::<u32>(),
+        let parts: Vec<&str> = s.trim().split_whitespace().collect();
+        if parts.len() == 5 {
+            if let (Ok(y), Ok(month), Ok(d), Ok(h), Ok(minute)) = (
+                parts[0].parse::<i64>(),
+                parts[1].parse::<u32>(),
+                parts[2].parse::<u32>(),
+                parts[3].parse::<u32>(),
+                parts[4].parse::<u32>(),
             ) {
-                return (y, mo, d, h, mi);
+                return (y, month, d, h, minute);
             }
         }
     }
@@ -64,7 +64,7 @@ pub fn local_now() -> (i64, u32, u32, u32, u32) {
 
 /* --- formatting --- */
 
-pub fn current_timestamp() -> String {
-    let (y, mo, d, h, mi) = local_now();
-    format!("{:04}-{:02}-{:02}_{:02}-{:02}", y, mo, d, h, mi)
+pub fn get_current_timestamp() -> String {
+    let (y, month, d, h, minute) = get_local_time();
+    format!("{:04}-{:02}-{:02}_{:02}-{:02}", y, month, d, h, minute)
 }
