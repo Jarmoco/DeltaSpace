@@ -9,5 +9,5 @@ mod value;
 
 // Exports
 
-pub use parser::{parse, stringify, ParseError, Result};
+pub use parser::{parse, stringify};
 pub use value::Value;
