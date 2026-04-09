@@ -4,8 +4,6 @@
  * Uses Windows Console API via FFI - no external dependencies.
  * -------------------------------------------------------------------------- */
 
-use std::os::windows::io::AsRawHandle;
-
 /* --- Constants ------------------------------------------------------------ */
 
 const STD_INPUT_HANDLE: u32 = 0xFFFFFFF6;
@@ -13,9 +11,7 @@ const STD_OUTPUT_HANDLE: u32 = 0xFFFFFFF5;
 
 const ENABLE_ECHO_INPUT: u32 = 0x0004;
 const ENABLE_LINE_INPUT: u32 = 0x0002;
-const ENABLE_PROCESSED_INPUT: u32 = 0x0001;
 const ENABLE_VIRTUAL_TERMINAL_INPUT: u32 = 0x0200;
-const ENABLE_VIRTUAL_TERMINAL_PROCESSING: u32 = 0x0004;
 
 /* --- FFI ------------------------------------------------------------------ */
 
@@ -86,16 +82,6 @@ fn get_stdin() -> *mut std::ffi::c_void {
 
 /* --- TTY Control ---------------------------------------------------------- */
 
-pub fn tty_fd() -> Option<std::fs::File> {
-    // On Windows, we use stdin/stdout directly
-    // Try to open CONIN$ for console input
-    std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open("CON$")
-        .ok()
-}
-
 pub fn tty_raw() {
     let handle = get_stdin();
     if handle.is_null() {
@@ -114,27 +100,8 @@ pub fn tty_raw() {
             }
         });
 
-        // Disable line input and echo, enable virtual terminal input for ANSI sequences
         let new_mode =
             mode & !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT) | ENABLE_VIRTUAL_TERMINAL_INPUT;
-        SetConsoleMode(handle, new_mode);
-    }
-}
-
-pub fn tty_raw_timeout() {
-    let handle = get_stdin();
-    if handle.is_null() {
-        return;
-    }
-
-    unsafe {
-        let mut mode: u32 = 0;
-        if GetConsoleMode(handle, &mut mode) == 0 {
-            return;
-        }
-
-        // Disable line input and echo
-        let new_mode = mode & !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
         SetConsoleMode(handle, new_mode);
     }
 }

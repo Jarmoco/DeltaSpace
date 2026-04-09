@@ -39,6 +39,12 @@ pub fn children<'a>(
     diff: &'a HashMap<String, (i64, u64)>,
     parent: Option<&str>,
 ) -> Vec<(&'a str, i64, u64)> {
+    let root_path = if cfg!(target_os = "windows") {
+        "C:/"
+    } else {
+        "/"
+    };
+
     let mut out: Vec<(&'a str, i64, u64)> = diff
         .iter()
         .filter_map(|(path, &(d, current_size))| {
@@ -55,6 +61,9 @@ pub fn children<'a>(
                     }
                 }
                 None => {
+                    if path == root_path {
+                        return None;
+                    }
                     let slash_count = path.chars().filter(|&c| c == '/').count();
                     slash_count <= 1
                 }

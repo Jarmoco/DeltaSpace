@@ -6,11 +6,10 @@
  * and human-readable size formatting.
  * -------------------------------------------------------------------------- */
 
-use std::{
-    fs, io,
-    io::{Read, Write},
-    sync::atomic::Ordering,
-};
+use std::{fs, io, io::Write, sync::atomic::Ordering};
+
+#[cfg(not(target_os = "windows"))]
+use std::io::Read;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -21,6 +20,7 @@ mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
 
+#[cfg(not(target_os = "windows"))]
 mod signal;
 
 /* --- Constants ------------------------------------------------------------ */
@@ -123,6 +123,7 @@ pub fn tty_fd() -> Option<std::fs::File> {
 }
 
 #[cfg(target_os = "windows")]
+#[allow(dead_code)]
 pub fn tty_fd() -> Option<std::fs::File> {
     // On Windows, use CONIN$ for console input
     fs::OpenOptions::new()
@@ -139,7 +140,7 @@ pub use linux::{tty_raw, tty_raw_timeout, tty_restore};
 pub use macos::{tty_raw, tty_raw_timeout, tty_restore};
 
 #[cfg(target_os = "windows")]
-pub use windows::{tty_raw, tty_raw_timeout, tty_restore};
+pub use windows::{tty_raw, tty_restore};
 
 /* --- Input ---------------------------------------------------------------- */
 
@@ -279,4 +280,5 @@ pub fn fmt_size(mut n: f64) -> String {
 /* --- Windows Re-exports --------------------------------------------------- */
 
 #[cfg(target_os = "windows")]
-pub use windows::ReadFile;
+#[allow(unused_imports)]
+pub(crate) use windows::ReadFile;
