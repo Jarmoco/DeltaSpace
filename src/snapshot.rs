@@ -13,6 +13,23 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+/* --- Path utilities ------------------------------------------------------- */
+
+#[cfg(not(target_os = "windows"))]
+const PATH_SEP: &str = "/";
+
+#[cfg(target_os = "windows")]
+const PATH_SEP: &str = "\\";
+
+fn join_path_components(components: &[&str]) -> String {
+    components.join(PATH_SEP)
+}
+
+fn path_starts_with_child(parent: &str, child: &str) -> bool {
+    let prefix = format!("{}{}", parent, PATH_SEP);
+    child.starts_with(&prefix)
+}
+
 /* --- commands: capture & list --- */
 
 pub fn cmd_scan(verbose: bool) -> String {
@@ -41,14 +58,18 @@ pub fn cmd_scan(verbose: bool) -> String {
     let mut layers: HashMap<String, HashMap<String, u64>> = HashMap::new();
     for (path, &size) in &sizes {
         if size >= crate::constants::THRESHOLD && !crate::constants::is_excluded(path) {
-            let depth = path.chars().filter(|&c| c == '/').count().to_string();
+            let depth = path
+                .chars()
+                .filter(|&c| c == PATH_SEP.chars().next().unwrap())
+                .count()
+                .to_string();
             layers.entry(depth).or_default().insert(path.clone(), size);
         }
     }
 
     let value = crate::json_utils::layers_to_json_value(&layers);
     let ts = crate::time::get_current_timestamp();
-    let dest = format!("{}/snapshot_{}.json", output_dir, ts);
+    let dest = join_path_components(&[&output_dir, &format!("snapshot_{}.json", ts)]);
     fs::write(&dest, crate::json::stringify(&value)).expect("failed to write snapshot");
 
     if verbose {
@@ -209,9 +230,7 @@ pub fn apply_deletions(snapshot_idx: usize, paths: &[String]) -> Result<String, 
             if let crate::json::Value::Object(paths_obj) = paths_val {
                 for (p, size_val) in paths_obj.iter_mut() {
                     let is_target = paths.contains(p);
-                    let is_child = paths
-                        .iter()
-                        .any(|target| p.starts_with(&format!("{}/", target)));
+                    let is_child = paths.iter().any(|target| path_starts_with_child(target, p));
                     if is_target || is_child {
                         if let crate::json::Value::Number(n) = size_val {
                             *n = 0.0;
@@ -226,7 +245,7 @@ pub fn apply_deletions(snapshot_idx: usize, paths: &[String]) -> Result<String, 
                 if let crate::json::Value::Object(paths_obj) = paths_val {
                     for (p, size_val) in paths_obj.iter_mut() {
                         let is_parent =
-                            p != removed_path && removed_path.starts_with(&format!("{}/", p));
+                            p != removed_path && path_starts_with_child(p, removed_path);
                         if is_parent {
                             if let crate::json::Value::Number(n) = size_val {
                                 let current = *n as i64;
@@ -243,7 +262,7 @@ pub fn apply_deletions(snapshot_idx: usize, paths: &[String]) -> Result<String, 
     let output_dir = crate::constants::get_output_dir();
     fs::create_dir_all(&output_dir).unwrap_or_default();
     let ts = crate::time::get_current_timestamp();
-    let dest = format!("{}/snapshot_{}.json", output_dir, ts);
+    let dest = join_path_components(&[&output_dir, &format!("snapshot_{}.json", ts)]);
     fs::write(&dest, crate::json::stringify(&val)).map_err(|e| e.to_string())?;
     Ok(dest)
 }
