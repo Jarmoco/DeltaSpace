@@ -70,23 +70,18 @@ thread_local! {
     static ORIGINAL_MODE: std::cell::RefCell<Option<u32>> = const { std::cell::RefCell::new(None) };
 }
 
-static mut STDIN_HANDLE: Option<*mut std::ffi::c_void> = None;
+struct Handle(*mut std::ffi::c_void);
+unsafe impl Send for Handle {}
+unsafe impl Sync for Handle {}
+
+static STDIN_HANDLE: std::sync::OnceLock<Handle> = std::sync::OnceLock::new();
 
 /* --- Initialization ------------------------------------------------------- */
 
-pub fn init_stdin_handle() {
-    unsafe {
-        if STDIN_HANDLE.is_none() {
-            STDIN_HANDLE = Some(GetStdHandle(STD_INPUT_HANDLE));
-        }
-    }
-}
-
 fn get_stdin() -> *mut std::ffi::c_void {
-    unsafe {
-        init_stdin_handle();
-        STDIN_HANDLE.unwrap_or(std::ptr::null_mut())
-    }
+    STDIN_HANDLE
+        .get_or_init(|| unsafe { Handle(GetStdHandle(STD_INPUT_HANDLE)) })
+        .0
 }
 
 /* --- TTY Control ---------------------------------------------------------- */
@@ -119,8 +114,9 @@ pub fn tty_raw() {
             }
         });
 
-        // Disable line input and echo
-        let new_mode = mode & !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+        // Disable line input and echo, enable virtual terminal input for ANSI sequences
+        let new_mode =
+            mode & !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT) | ENABLE_VIRTUAL_TERMINAL_INPUT;
         SetConsoleMode(handle, new_mode);
     }
 }

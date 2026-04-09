@@ -197,20 +197,33 @@ pub fn getch() -> String {
         if success != 0 && bytes_read > 0 {
             result.push(first[0]);
 
-            if first[0] == 0xe0 {
-                // Windows uses 0xe0 prefix for special keys
-                tty_raw_timeout();
-                let mut seq = [0u8; 3];
+            if first[0] == 0x1b {
+                // ANSI escape sequence - read remaining bytes
+                let mut seq = [0u8; 2];
                 let mut n: u32 = 0;
                 windows::ReadFile(
                     handle as *mut std::ffi::c_void,
                     seq.as_mut_ptr(),
-                    3,
+                    2,
                     &mut n,
                     std::ptr::null_mut(),
                 );
                 if n > 0 {
                     result.extend_from_slice(&seq[..n as usize]);
+                }
+            } else if first[0] == 0xe0 {
+                // Windows uses 0xe0 prefix for special keys
+                let mut seq = [0u8; 1];
+                let mut n: u32 = 0;
+                windows::ReadFile(
+                    handle as *mut std::ffi::c_void,
+                    seq.as_mut_ptr(),
+                    1,
+                    &mut n,
+                    std::ptr::null_mut(),
+                );
+                if n > 0 {
+                    result.push(seq[0]);
                 }
             }
         }
@@ -220,10 +233,14 @@ pub fn getch() -> String {
 
     // Convert Windows arrow keys to ANSI sequences
     match result.as_slice() {
-        [0xe0, 0x48] => "\x1b[A".to_string(), // Up
-        [0xe0, 0x50] => "\x1b[B".to_string(), // Down
-        [0xe0, 0x4d] => "\x1b[C".to_string(), // Right
-        [0xe0, 0x4b] => "\x1b[D".to_string(), // Left
+        [0x1b, 0x5b, 0x41] => "\x1b[A".to_string(), // Up
+        [0x1b, 0x5b, 0x42] => "\x1b[B".to_string(), // Down
+        [0x1b, 0x5b, 0x43] => "\x1b[C".to_string(), // Right
+        [0x1b, 0x5b, 0x44] => "\x1b[D".to_string(), // Left
+        [0xe0, 0x48] => "\x1b[A".to_string(),       // Up (legacy)
+        [0xe0, 0x50] => "\x1b[B".to_string(),       // Down (legacy)
+        [0xe0, 0x4d] => "\x1b[C".to_string(),       // Right (legacy)
+        [0xe0, 0x4b] => "\x1b[D".to_string(),       // Left (legacy)
         _ => String::from_utf8_lossy(&result).into_owned(),
     }
 }

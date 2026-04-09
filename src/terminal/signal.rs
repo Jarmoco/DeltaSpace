@@ -104,6 +104,42 @@ mod imp {
     }
 }
 
+// ── Windows: WinAPI ─────────────────────────────────────────────────
+
+#[cfg(target_os = "windows")]
+mod imp {
+    #[link(name = "msvcrt", kind = "dylib")]
+    unsafe extern "C" {
+        fn _exit(code: i32) -> !;
+        #[link_name = "write"]
+        fn c_write(fd: i32, buf: *const u8, len: usize) -> i32;
+    }
+
+    #[link(name = "kernel32", kind = "dylib")]
+    unsafe extern "C" {
+        fn SetConsoleCtrlHandler(handler: *const (), add: i32) -> i32;
+    }
+
+    pub unsafe fn write(fd: i32, buf: *const u8, len: usize) {
+        unsafe {
+            c_write(fd, buf, len);
+        }
+    }
+
+    pub unsafe fn exit(code: i32) -> ! {
+        unsafe {
+            _exit(code);
+        }
+    }
+
+    pub unsafe fn install(_signum: i32, handler: usize) {
+        unsafe {
+            let handler_fn: extern "C" fn(u32) -> i32 = core::mem::transmute(handler);
+            SetConsoleCtrlHandler(core::mem::transmute(handler_fn), 1);
+        }
+    }
+}
+
 // ── macOS: libSystem ────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]

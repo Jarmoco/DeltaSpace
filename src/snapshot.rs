@@ -58,11 +58,7 @@ pub fn cmd_scan(verbose: bool) -> String {
     let mut layers: HashMap<String, HashMap<String, u64>> = HashMap::new();
     for (path, &size) in &sizes {
         if size >= crate::constants::THRESHOLD && !crate::constants::is_excluded(path) {
-            let depth = path
-                .chars()
-                .filter(|&c| c == PATH_SEP.chars().next().unwrap())
-                .count()
-                .to_string();
+            let depth = path.chars().filter(|&c| c == '/').count().to_string();
             layers.entry(depth).or_default().insert(path.clone(), size);
         }
     }

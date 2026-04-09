@@ -2,11 +2,10 @@
 name: "deltaspace"
 arch: "amd64"
 platform: "linux"
-version: "0.1.5"
+version: "0.1.6"
 section: "default"
 priority: "extra"
 depends:
-  - coreutils
 maintainer: "Jarmoco"
 description: |
   DeltaSpace is a filesystem diff tool.
