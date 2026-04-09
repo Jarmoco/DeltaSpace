@@ -1,6 +1,74 @@
 
 #!/bin/bash
 
+# -------------------------------------
+# Check for package manager 
+# -------------------------------------
+# Check if pacman is available (for Arch Linux auto-install)
+if command -v pacman &> /dev/null; then
+    IS_ARCH=true
+else
+    IS_ARCH=false
+fi
+
+# -------------------------------------
+# Setup tracking variables 
+# -------------------------------------
+PACKAGES_TO_CLEANUP=()
+
+install_if_needed() {
+    local cmd="$1"
+    local package="$2"
+    local name="$3"
+    
+    if command -v "$cmd" &> /dev/null; then
+        return 1  # Already installed, don't track
+    fi
+    
+    if [ "$IS_ARCH" = true ]; then
+        echo "$name not found. Installing via pacman..."
+        read -p "Install $name? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            sudo pacman -S --noconfirm "$package"
+            PACKAGES_TO_CLEANUP+=("$package")
+            echo "$name installed successfully."
+            return 0
+        else
+            return 2  # User declined
+        fi
+    else
+        return 2  # Not Arch, can't auto-install
+    fi
+}
+
+# -------------------------------------
+# Cleanup function
+# -------------------------------------
+cleanup_packages() {
+    if [ ${#PACKAGES_TO_CLEANUP[@]} -eq 0 ]; then
+        return
+    fi
+    
+    echo ""
+    read -p "Uninstall packages installed by this script? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Uninstalling packages..."
+        for pkg in "${PACKAGES_TO_CLEANUP[@]}"; do
+            sudo pacman -R --noconfirm "$pkg" 2>/dev/null || true
+        done
+        echo "Cleanup complete."
+    else
+        echo "Packages left installed. Remove manually with:"
+        echo "  sudo pacman -R ${PACKAGES_TO_CLEANUP[*]}"
+    fi
+}
+
+# -------------------------------------
+# Main build flow
+# -------------------------------------
+
 # Prompt user for version
 read -p "Enter version: " VERSION
 
@@ -20,8 +88,34 @@ fi
 
 # Ensure nfpm is installed
 if ! command -v nfpm &> /dev/null; then
-    echo "nfpm could not be found. Please install it first."
-    exit 1
+    if [ "$IS_ARCH" = true ]; then
+        echo "nfpm could not be found."
+        read -p "Install nfpm? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            # Try to install nfpm from AUR (may need makepkg)
+            if command -v yay &> /dev/null; then
+                yay -S --noconfirm nfpm
+                PACKAGES_TO_CLEANUP+=("nfpm")
+            elif command -v makepkg &> /dev/null; then
+                cd /tmp
+                git clone https://aur.archlinux.org/nfpm.git
+                cd nfpm
+                makepkg -si --noconfirm
+                PACKAGES_TO_CLEANUP+=("nfpm")
+                cd -
+            else
+                echo "Neither yay nor makepkg found. Cannot build nfpm from AUR."
+                exit 1
+            fi
+        else
+            echo "nfpm is required for Linux build. Exiting."
+            exit 1
+        fi
+    else
+        echo "nfpm could not be found. Please install it first."
+        exit 1
+    fi
 fi
 
 # Create dist directory if it doesn't exist
@@ -44,21 +138,77 @@ tar -czf ./dist/deltaspace_${VERSION}_linux_x86_64.tar.gz ./target/release/delta
 
 # Ensure zig is installed 
 if ! command -v zig &> /dev/null; then
-  echo "zig could not be found. Please install it first."
-  exit 1
-fi 
+    echo "zig could not be found."
+    if [ "$IS_ARCH" = true ]; then
+        read -p "Install zig? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            # Check for yay/makepkg or use direct download
+            if command -v yay &> /dev/null; then
+                yay -S --noconfirm zig
+            elif command -v makepkg &> /dev/null; then
+                cd /tmp
+                git clone https://aur.archlinux.org/zig.git
+                cd zig
+                makepkg -si --noconfirm
+                cd -
+            else
+                # Try direct download
+                curl -L https://ziglang.org/download/0.14.0/zig-linux-x86_64.tar.xz -o /tmp/zig.tar.xz
+                sudo tar -xf /tmp/zig.tar.xz -C /opt
+                sudo ln -sf /opt/zig-linux-x86_64-0.14.0/zig /usr/local/bin/zig
+            fi
+            PACKAGES_TO_CLEANUP+=("zig")
+        else
+            echo "zig is required for macOS cross-compilation. Exiting."
+            exit 1
+        fi
+    else
+        echo "zig could not be found. Please install it first."
+        exit 1
+    fi
+fi
 
 # Ensure cargo-zigbuild is installed
 if ! command -v cargo-zigbuild &> /dev/null; then
-  echo "cargo-zigbuild could not be found. Please install it first."
-  exit 1
-fi 
+    echo "cargo-zigbuild could not be found."
+    if [ "$IS_ARCH" = true ]; then
+        read -p "Install cargo-zigbuild? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            cargo install cargo-zigbuild
+            # Note: cargo install doesn't add to pacman, so we track differently
+            # Just note it for user
+            echo "cargo-zigbuild installed (via cargo install)."
+        else
+            echo "cargo-zigbuild is required for macOS cross-compilation. Exiting."
+            exit 1
+        fi
+    else
+        echo "cargo-zigbuild could not be found. Please install it first."
+        exit 1
+    fi
+fi
 
 # Ensure rustup target add aarch64-apple-darwin was run
 if ! rustup target list | grep "aarch64-apple-darwin (installed)" > /dev/null; then
-  echo "aarch64-apple-darwin target not found. Please run 'rustup target add aarch64-apple-darwin' first."
-  exit 1
-fi 
+    echo "aarch64-apple-darwin target not found."
+    if [ "$IS_ARCH" = true ]; then
+        read -p "Install aarch64-apple-darwin target? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            rustup target add aarch64-apple-darwin
+            # Track for potential cleanup (though rustup targets are small)
+            echo "aarch64-apple-darwin target installed."
+        else
+            echo "aarch64-apple-darwin target is required for macOS cross-compilation. Exiting."
+            exit 1
+        fi
+    else
+        echo "Please run 'rustup target add aarch64-apple-darwin' first."
+        exit 1
+    fi
+fi
 
 cargo zigbuild --target aarch64-apple-darwin --release
 
@@ -72,8 +222,20 @@ MINGW_INSTALLED_BY_SCRIPT=false
 
 # Ensure rustup target for Windows GNU is installed
 if ! rustup target list | grep "x86_64-pc-windows-gnu (installed)" > /dev/null; then
-    echo "x86_64-pc-windows-gnu target not found. Installing..."
-    rustup target add x86_64-pc-windows-gnu
+    echo "x86_64-pc-windows-gnu target not found."
+    if [ "$IS_ARCH" = true ]; then
+        read -p "Install x86_64-pc-windows-gnu target? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            rustup target add x86_64-pc-windows-gnu
+        else
+            echo "x86_64-pc-windows-gnu target is required for Windows build. Exiting."
+            exit 1
+        fi
+    else
+        echo "Please run 'rustup target add x86_64-pc-windows-gnu' first."
+        exit 1
+    fi
 fi
 
 # Check for mingw-w64 (required for Windows GNU target)
@@ -81,13 +243,14 @@ if ! command -v x86_64-w64-mingw32-gcc &> /dev/null; then
     echo "x86_64-w64-mingw32-gcc could not be found."
     
     # Detect OS and offer to install mingw-w64
-    if [ -f /etc/arch-release ]; then
+    if [ "$IS_ARCH" = true ]; then
         echo "Detected Arch Linux. Installing mingw-w64..."
         read -p "Install mingw-w64? (y/n): " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             sudo pacman -S --noconfirm mingw-w64-binutils mingw-w64-gcc mingw-w64-headers mingw-w64-winpthreads
             MINGW_INSTALLED_BY_SCRIPT=true
+            PACKAGES_TO_CLEANUP+=("mingw-w64-binutils" "mingw-w64-gcc" "mingw-w64-headers" "mingw-w64-winpthreads")
             echo "mingw-w64 installed successfully."
         else
             echo "mingw-w64 is required for Windows build. Exiting."
@@ -115,22 +278,16 @@ else
     echo "Warning: Windows binary not found at expected location"
 fi
 
+# -------------------------------------
+# Build complete
+# -------------------------------------
+
 echo ""
 echo "Build complete! Packages available in ./dist/"
 echo "Files created:"
 ls -lh ./dist/
 
-# Ask to uninstall mingw-w64 if installed by this script
-if [ "$MINGW_INSTALLED_BY_SCRIPT" = true ]; then
-    echo ""
-    read -p "Uninstall mingw-w64 (installed by this script)? (y/n): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Uninstalling mingw-w64..."
-        sudo pacman -R --noconfirm mingw-w64-binutils mingw-w64-gcc mingw-w64-headers mingw-w64-winpthreads 2>/dev/null || true
-        echo "mingw-w64 uninstalled."
-    else
-        echo "mingw-w64 left installed. You can remove it manually with:"
-        echo "  sudo pacman -R mingw-w64-binutils mingw-w64-gcc mingw-w64-headers mingw-w64-winpthreads"
-    fi
+# Ask to cleanup packages if any were installed
+if [ ${#PACKAGES_TO_CLEANUP[@]} -gt 0 ]; then
+    cleanup_packages
 fi
