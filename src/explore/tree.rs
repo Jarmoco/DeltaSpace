@@ -39,18 +39,39 @@ pub fn children<'a>(
     diff: &'a HashMap<String, (i64, u64)>,
     parent: Option<&str>,
 ) -> Vec<(&'a str, i64, u64)> {
-    let prefix = match parent {
-        Some(p) => format!("{}/", p),
-        None => "/".to_string(),
+    let root_path = if cfg!(target_os = "windows") {
+        "C:/"
+    } else {
+        "/"
     };
+
     let mut out: Vec<(&'a str, i64, u64)> = diff
         .iter()
         .filter_map(|(path, &(d, current_size))| {
             if crate::constants::is_excluded(path) {
                 return None;
             }
-            let rest = path.strip_prefix(&prefix)?;
-            if rest.contains('/') || rest.is_empty() {
+            let is_child = match parent {
+                Some(p) => {
+                    let prefix = format!("{}/", p);
+                    if let Some(rest) = path.strip_prefix(&prefix) {
+                        !rest.contains('/')
+                    } else {
+                        false
+                    }
+                }
+                None => {
+                    if path == root_path {
+                        return None;
+                    }
+                    let slash_count = path.chars().filter(|&c| c == '/').count();
+                    slash_count <= 1
+                }
+            };
+            if !is_child {
+                return None;
+            }
+            if path.is_empty() {
                 return None;
             }
             Some((path.as_str(), d, current_size))

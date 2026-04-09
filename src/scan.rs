@@ -11,13 +11,20 @@ use std::{
     collections::HashMap,
     fs,
     io::{self, Write},
-    os::unix::fs::MetadataExt,
     path::Path,
 };
 
+fn normalize_path(path: &str) -> String {
+    // Normalize paths to use forward slashes for consistent storage
+    #[cfg(target_os = "windows")]
+    return path.replace('\\', "/");
+    #[cfg(not(target_os = "windows"))]
+    return path.to_string();
+}
+
 pub fn scan(root: &str) -> HashMap<String, u64> {
     let mut sizes: HashMap<String, u64> = HashMap::new();
-    let mut stack: Vec<String> = vec![root.to_string()];
+    let mut stack: Vec<String> = vec![normalize_path(root)];
     let mut order: Vec<String> = Vec::new();
     let mut counter: u64 = 0;
 
@@ -34,7 +41,7 @@ pub fn scan(root: &str) -> HashMap<String, u64> {
                     Err(_) => continue,
                 };
                 if !meta.file_type().is_symlink() && meta.is_dir() {
-                    let p = entry.path().to_string_lossy().into_owned();
+                    let p = normalize_path(&entry.path().to_string_lossy());
                     if !crate::constants::is_excluded(&p) {
                         stack.push(p);
                     }
@@ -56,10 +63,10 @@ pub fn scan(root: &str) -> HashMap<String, u64> {
                     continue;
                 }
                 if meta.is_dir() {
-                    let p = entry.path().to_string_lossy().into_owned();
+                    let p = normalize_path(&entry.path().to_string_lossy());
                     total += sizes.get(&p).copied().unwrap_or(0);
                 } else {
-                    total += meta.size();
+                    total += meta.len();
                 }
             }
         }
