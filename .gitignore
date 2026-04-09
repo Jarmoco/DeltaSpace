@@ -9,4 +9,5 @@ Cargo.lock
 dist/
 *.exe
 *.msi
+homebrew-deltaspace/
 CD.md
