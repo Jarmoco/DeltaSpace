@@ -1,6 +1,6 @@
 # DeltaSpace
 
-**DeltaSpace** is a _lightweight, zero crate dependency_ **filesystem snapshot and diff explorer** tool for Linux and MacOS.
+**DeltaSpace** is a _lightweight, zero crate dependency_ **filesystem snapshot and diff explorer** tool for Linux, MacOS and Windows.
 
 ![DeltaSpace Screenshot](.github/screenshot.png)
 
@@ -13,7 +13,7 @@
 - CLI arguments for programmatic use
 
 ## Installation 
-You can manually install from [releases](https://github.com/Jarmoco/DeltaSpace/releases) or use [Homebrew](https://brew.sh/):
+You can manually install from [releases](https://github.com/Jarmoco/DeltaSpace/releases) or use [Homebrew](https://brew.sh/) (Linux and MacOS only):
 
 ```bash
 brew tap Jarmoco/deltaspace
@@ -90,15 +90,18 @@ systemctl --user enable --now deltaspace-scan.timer
 Tested on my system, it created a snapshot of ~127k directories in 6.5s.
 Compilation time is around <2s due to the absence of dependencies.
 
-## Building
+## Building (Linux)
 
-To build the code you need to have `cargo` and `nfpm` installed.
-To cross compile from linux to macos, you also need `zig` and `cargo-zigbuild` installed and the `aarch64-apple-darwin` target added to rustup.
+- To build the code you need to have `cargo` and `nfpm` installed.
+- To cross compile from linux to macos, you also need `zig` and `cargo-zigbuild` installed and the `aarch64-apple-darwin` target added to rustup.
+- To cross compile from linux to windows, you also need `mingw-w64` installed and the `x86_64-pc-windows-gnu` target added to rustup.
+
+If you are on Arch Linux, the build script should be able to handle installation of the build dependencies automatically.
 
 Then run:
 
 ```bash
-./build.sh
+./scripts/build.sh
 ```
 
-This will create the packages in the `dist/` directory.
+Packages will be available in the `dist/` directory.
