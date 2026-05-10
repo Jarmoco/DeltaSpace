@@ -1,3 +1,6 @@
 [submodule "rcc-scripts"]
 	path = rcc-scripts
 	url = https://github.com/Jarmoco/rcc-scripts
+[submodule "homebrew-deltaspace"]
+	path = homebrew-deltaspace
+	url = https://github.com/Jarmoco/homebrew-deltaspace
