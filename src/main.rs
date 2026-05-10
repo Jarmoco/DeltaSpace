@@ -280,7 +280,7 @@ fn main() {
 
     match parse_cli_args(&args) {
         CliCommand::Scan => {
-            println!("{}", snapshot::cmd_scan(false));
+            snapshot::cmd_scan(true);
         }
         CliCommand::List { json } => {
             if json {
