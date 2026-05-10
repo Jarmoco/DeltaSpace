@@ -92,13 +92,11 @@ Compilation time is around <2s due to the absence of dependencies.
 
 ## Building
 
-To build the code you need to have `cargo` and `nfpm` installed.
-To cross compile from linux to macos, you also need `zig` and `cargo-zigbuild` installed and the `aarch64-apple-darwin` target added to rustup.
-
-Then run:
+All build dependencies are managed by the `rcc-scripts` submodule.
+Just run:
 
 ```bash
-./build.sh
+./rcc-scripts/build.sh
 ```
 
 This will create the packages in the `dist/` directory.
