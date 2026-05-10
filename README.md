@@ -1,6 +1,6 @@
 # DeltaSpace
 
-**DeltaSpace** is a _lightweight, zero crate dependency_ **filesystem snapshot and diff explorer** tool for Linux and MacOS.
+**DeltaSpace** is a _lightweight, zero crate dependency_ **filesystem snapshot and diff explorer** tool for Linux, MacOS and Windows.
 
 ![DeltaSpace Screenshot](.github/screenshot.png)
 
