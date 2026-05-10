@@ -6,7 +6,8 @@
  *
  * Commands:
  *   scan                        Scan filesystem and save a snapshot
- *   list                        List available snapshots as JSON
+ *   list                        List available snapshots
+ *   list --json                 List available snapshots as JSON
  *   diff  <old_idx> <new_idx>   Print diff between two snapshots as JSON
  *   show  <idx>                 Print a snapshot as flat JSON
  *   explore <old_idx> <new_idx> Open the interactive diff explorer
@@ -43,7 +44,9 @@ const MENU_ITEMS: &[&str] = &[
 
 enum CliCommand {
     Scan,
-    List,
+    List {
+        json: bool,
+    },
     Show {
         idx: usize,
     },
@@ -70,7 +73,8 @@ Usage (CLI API):      ./deltaspace <command> [args]
 
 Commands:
   scan                        Scan filesystem and save a snapshot
-  list                        List available snapshots as JSON
+  list                        List available snapshots
+  list --json                 List available snapshots as JSON
   diff  <old_idx> <new_idx>   Print diff between two snapshots as JSON
                               (old_idx < new_idx is enforced)
   show  <idx>                 Print a snapshot as flat JSON
@@ -86,7 +90,10 @@ Exit codes: 0 success, 1 error, 2 bad arguments"
 fn parse_cli_args(args: &[String]) -> CliCommand {
     match args[1].as_str() {
         "scan" => CliCommand::Scan,
-        "list" => CliCommand::List,
+        "list" => {
+            let json = args.get(2).map_or(false, |s| s == "--json");
+            CliCommand::List { json }
+        }
         "show" => {
             if args.len() < 3 {
                 utils::die("Usage: deltaspace show <idx>", 2);
@@ -275,8 +282,12 @@ fn main() {
         CliCommand::Scan => {
             println!("{}", snapshot::cmd_scan(false));
         }
-        CliCommand::List => {
-            snapshot::cmd_list(true);
+        CliCommand::List { json } => {
+            if json {
+                snapshot::cmd_list(true);
+            } else {
+                snapshot::cmd_list_human();
+            }
         }
         CliCommand::Show { idx } => {
             snapshot::cmd_show(idx, true);

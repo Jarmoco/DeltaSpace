@@ -30,6 +30,43 @@ fn path_starts_with_child(parent: &str, child: &str) -> bool {
     child.starts_with(&prefix)
 }
 
+/* --- Helpers --------------------------------------------------------------- */
+
+fn month_abbr(m: u32) -> &'static str {
+    match m {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        12 => "Dec",
+        _ => "?",
+    }
+}
+
+fn parse_date_parts(name: &str) -> Option<(u32, u32, u32, u32, u32)> {
+    let inner = name.strip_prefix("snapshot_")?.strip_suffix(".json")?;
+    let parts: Vec<&str> = inner.split('_').collect();
+    let date_parts: Vec<&str> = parts.first()?.split('-').collect();
+    let time_parts: Vec<&str> = parts.get(1)?.split('-').collect();
+    if date_parts.len() < 3 || time_parts.len() < 2 {
+        return None;
+    }
+    Some((
+        date_parts[0].parse().ok()?,
+        date_parts[1].parse().ok()?,
+        date_parts[2].parse().ok()?,
+        time_parts[0].parse().ok()?,
+        time_parts[1].parse().ok()?,
+    ))
+}
+
 /* --- commands: capture & list --- */
 
 pub fn cmd_scan(verbose: bool) -> String {
@@ -105,6 +142,29 @@ pub fn cmd_list(as_json: bool) -> Vec<String> {
         println!("{}", crate::json::stringify(&arr));
     }
     files
+}
+
+pub fn cmd_list_human() {
+    let files = cmd_list(false);
+    if files.is_empty() {
+        println!("No snapshots found.");
+        return;
+    }
+    for (i, path) in files.iter().enumerate() {
+        let name = std::path::Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy())
+            .unwrap_or_default();
+        let parsed = parse_date_parts(&name);
+        let (y, m, d, h, min) = match parsed {
+            Some(v) => v,
+            None => {
+                println!("  {:>2}) {}", i, name);
+                continue;
+            }
+        };
+        println!("  {:>2})  {:2} {} {:04}  {:02}:{:02}", i, d, month_abbr(m), y, h, min);
+    }
 }
 
 /* --- internal: JSON ↔ HashMap --- */
