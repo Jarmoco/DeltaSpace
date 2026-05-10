@@ -190,3 +190,56 @@ fn cmd_prune_manual() {
         }
     }
 }
+
+/* --- CLI helpers ----------------------------------------------------------- */
+
+pub fn list_smart_methods() {
+    println!("Available pruning methods:\n");
+    for method in smart::SmartMethod::all() {
+        println!("  {:<20} {}", method.name(), method.description());
+    }
+}
+
+pub fn run_smart_cli(method_name: &str) {
+    let method = match smart::SmartMethod::from_name(method_name) {
+        Some(m) => m,
+        None => {
+            eprintln!(
+                "Unknown pruning method '{}'. \
+                 Use 'deltaspace prune list' to see available methods.",
+                method_name
+            );
+            std::process::exit(2);
+        }
+    };
+
+    let files = crate::snapshot::cmd_list(false);
+    if files.is_empty() {
+        println!("No snapshots found.");
+        return;
+    }
+
+    let mut entries = group_snapshots(&files);
+    smart::apply_smart_strategy(&mut entries, method);
+
+    let marked_count = entries.iter().filter(|e| e.marked).count();
+    if marked_count == 0 {
+        println!("No snapshots to delete with method '{}'.", method_name);
+        return;
+    }
+
+    let (mut deleted, mut failed) = (0u32, 0u32);
+    for entry in entries.iter().filter(|e| e.marked) {
+        match fs::remove_file(&entry.path) {
+            Ok(_) => {
+                println!("  deleted  {}", entry.name);
+                deleted += 1;
+            }
+            Err(err) => {
+                eprintln!("  failed   {}: {}", entry.name, err);
+                failed += 1;
+            }
+        }
+    }
+    println!("\nDeleted: {}  Failed: {}", deleted, failed);
+}

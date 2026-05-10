@@ -15,6 +15,45 @@ pub enum SmartMethod {
     DayFirstLast,
 }
 
+impl SmartMethod {
+    pub fn all() -> &'static [SmartMethod] {
+        &[SmartMethod::DayLast, SmartMethod::DayFirst, SmartMethod::DayFirstLast]
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            SmartMethod::DayLast => "day-last",
+            SmartMethod::DayFirst => "day-first",
+            SmartMethod::DayFirstLast => "day-first-last",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            SmartMethod::DayLast => "Day-Last",
+            SmartMethod::DayFirst => "Day-First",
+            SmartMethod::DayFirstLast => "Day-First-Last",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            SmartMethod::DayLast => "Keep only the last snapshot of each day",
+            SmartMethod::DayFirst => "Keep only the first snapshot of each day",
+            SmartMethod::DayFirstLast => "Keep first and last snapshot per day",
+        }
+    }
+
+    pub fn from_name(s: &str) -> Option<SmartMethod> {
+        match s {
+            "day-last" => Some(SmartMethod::DayLast),
+            "day-first" => Some(SmartMethod::DayFirst),
+            "day-first-last" => Some(SmartMethod::DayFirstLast),
+            _ => None,
+        }
+    }
+}
+
 /* --- Strategy -------------------------------------------------------------- */
 
 pub fn apply_smart_strategy(entries: &mut [SnapEntry], method: SmartMethod) {
@@ -63,12 +102,6 @@ pub fn apply_smart_strategy(entries: &mut [SnapEntry], method: SmartMethod) {
 /* --- Interactive menu ------------------------------------------------------ */
 
 fn select_method() -> Option<SmartMethod> {
-    let modes: &[(&str, &str)] = &[
-        ("Day-Last", "Keep only the last snapshot of each day"),
-        ("Day-First", "Keep only the first snapshot of each day"),
-        ("Day-First-Last", "Keep first and last snapshot per day"),
-    ];
-
     let mut cursor = 0usize;
     loop {
         crate::terminal::clear();
@@ -76,8 +109,14 @@ fn select_method() -> Option<SmartMethod> {
         println!("  Smart Pruning");
         println!("  \x1b[2m\u{2191}\u{2193}/jk navigate  Enter select  q back\x1b[0m");
         println!();
-        for (i, (name, desc)) in modes.iter().enumerate() {
-            let label = format!("[{}] {}  \u{2014} {}", i + 1, name, desc);
+        let methods = SmartMethod::all();
+        for (i, method) in methods.iter().enumerate() {
+            let label = format!(
+                "[{}] {}  \u{2014} {}",
+                i + 1,
+                method.display_name(),
+                method.description()
+            );
             if i == cursor {
                 println!("  \x1b[7m{}\x1b[0m", label);
             } else {
@@ -92,7 +131,7 @@ fn select_method() -> Option<SmartMethod> {
                 cursor = cursor.saturating_sub(1);
             }
             "\x1b[B" | "j" => {
-                cursor = (cursor + 1).min(modes.len() - 1);
+                cursor = (cursor + 1).min(methods.len() - 1);
             }
             "1" => return Some(SmartMethod::DayLast),
             "2" => return Some(SmartMethod::DayFirst),

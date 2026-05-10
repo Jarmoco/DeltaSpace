@@ -10,6 +10,8 @@
  *   diff  <old_idx> <new_idx>   Print diff between two snapshots as JSON
  *   show  <idx>                 Print a snapshot as flat JSON
  *   explore <old_idx> <new_idx> Open the interactive diff explorer
+ *   prune <method>              Prune snapshots with a smart method
+ *   prune list                  List available pruning methods
  *
  * Exit codes: 0 success, 1 error, 2 bad arguments
  * -------------------------------------------------------------------------- */
@@ -53,6 +55,9 @@ enum CliCommand {
         first_index: usize,
         second_index: usize,
     },
+    Prune {
+        method: Option<String>,
+    },
     Help,
 }
 
@@ -71,6 +76,8 @@ Commands:
   show  <idx>                 Print a snapshot as flat JSON
   explore <old_idx> <new_idx> Open the interactive diff explorer
                               (old_idx < new_idx is enforced)
+  prune <method>              Run a smart pruning method
+  prune list                  List available pruning methods
 
 Exit codes: 0 success, 1 error, 2 bad arguments"
     );
@@ -102,6 +109,19 @@ fn parse_cli_args(args: &[String]) -> CliCommand {
             CliCommand::Diff {
                 first_index,
                 second_index,
+            }
+        }
+        "prune" => {
+            if args.len() > 2 {
+                let sub = args[2].as_str();
+                if sub == "-h" || sub == "--help" {
+                    return CliCommand::Help;
+                }
+                CliCommand::Prune {
+                    method: Some(args[2].clone()),
+                }
+            } else {
+                CliCommand::Prune { method: None }
             }
         }
         "explore" => {
@@ -278,6 +298,15 @@ fn main() {
             };
             explore::cmd_explore(base_idx, comp_idx);
         }
+        CliCommand::Prune { method } => match method.as_deref() {
+            None => {
+                println!("Usage: deltaspace prune <method>");
+                println!("       deltaspace prune list\n");
+                prune::list_smart_methods();
+            }
+            Some("list") => prune::list_smart_methods(),
+            Some(name) => prune::run_smart_cli(name),
+        },
         CliCommand::Help => {
             print_help();
         }
