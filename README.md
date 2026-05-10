@@ -6,11 +6,9 @@
 
 ## Features
 
-- Scan filesystem and save a snapshot
-- Compare snapshots
-- Prune snapshots
-- TUI for interactive usage
-- CLI arguments for programmatic use
+- Scan your entire filesystem and save snapshots
+- Compare snapshots in a diff view
+- Batch select and delete unwanted directories
 
 ## Installation 
 You can manually install from [releases](https://github.com/Jarmoco/DeltaSpace/releases) or use [Homebrew](https://brew.sh/):
@@ -27,22 +25,22 @@ brew install jarmoco/deltaspace/deltaspace
 
 ## Usage
 
-### Interactive mode
+### Interactive mode (TUI)
 
 ```bash
-./deltaspace
+deltaspace
 ```
 
 ### CLI mode
 
 ```bash
-./deltaspace <command> [args]
+deltaspace <command> [args]
 ```
 
 for help, run:
 
 ```bash
-./deltaspace -h
+deltaspace -h
 ```
 
 ## Automatic Scans
@@ -97,5 +95,7 @@ Just run:
 ```bash
 ./rcc-scripts/build.sh
 ```
+
+More info on the rcc-scripts available [here](https://github.com/Jarmoco/rcc-scripts)
 
 This will create the packages in the `dist/` directory.
