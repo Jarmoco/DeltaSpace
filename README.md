@@ -87,8 +87,7 @@ systemctl --user enable --now deltaspace-scan.timer
 
 ## Performance
 
-Tested on my system, it created a snapshot of ~127k directories in 6.5s.
-Compilation time is around <2s due to the absence of dependencies.
+Tested on my system, it created a snapshot of ~130k directories in ~7s on warm filesystem cache, ~35s on cold cache.
 
 ## Building
 
