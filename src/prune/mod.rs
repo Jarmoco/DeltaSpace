@@ -104,6 +104,13 @@ pub(crate) fn execute_deletions(entries: &mut [SnapEntry]) -> (u32, u32) {
     (deleted, failed)
 }
 
+/* --- Constants ------------------------------------------------------------- */
+
+const PRUNE_METHODS: &[&str] = &[
+    "Smart pruning (recommended)",
+    "Manual pruning",
+];
+
 /* --- Main ----------------------------------------------------------------- */
 
 pub fn cmd_prune() {
@@ -117,18 +124,51 @@ pub fn cmd_prune() {
         return;
     }
 
+    let mut cursor = 0usize;
+    const ITEMS: usize = 3;
+
     loop {
         crate::terminal::clear();
         println!();
-        println!("  Select your pruning method:\n");
-        println!("  [1] Smart pruning (recommended)");
-        println!("  [2] Manual pruning\n");
-        println!("  \x1b[2mq: go back\x1b[0m\n");
+        println!("  Select your pruning method:");
+        println!();
+        let mut i = 0usize;
+        while i < ITEMS {
+            let label = if i == 2 {
+                "[q] Go back".to_string()
+            } else {
+                format!("[{}] {}", i + 1, PRUNE_METHODS[i])
+            };
+            if i == cursor {
+                println!("  \x1b[7m▸\x1b[0m\x1b[7m{}\x1b[0m", label);
+            } else {
+                println!("   {}", label);
+            }
+            i += 1;
+        }
+        println!();
+        println!("  \x1b[2m\u{2191}\u{2193}/j/k: navigate   Enter: select   1-2/q: quick select\x1b[0m");
+        println!();
         let _ = io::stdout().flush();
 
         match crate::terminal::getch().as_str() {
-            "1" => smart::run_smart_mode(),
-            "2" => cmd_prune_manual(),
+            "\x1b[A" | "k" => {
+                cursor = cursor.saturating_sub(1);
+            }
+            "\x1b[B" | "j" => {
+                cursor = (cursor + 1).min(ITEMS - 1);
+            }
+            "\r" | "\n" => match cursor {
+                0 => smart::run_smart_mode(),
+                1 => cmd_prune_manual(),
+                _ => break,
+            },
+            "1" => {
+                smart::run_smart_mode();
+            }
+            "2" => {
+                cmd_prune_manual();
+            }
             "q" | "Q" | "\x03" => break,
             _ => {}
         }

@@ -170,7 +170,7 @@ fn render_menu(cursor: usize) {
         i += 1;
     }
     println!();
-    println!("  \x1b[2m↑↓/j/k: navigate   Enter: select   1-3: quick select   q: quit\x1b[0m");
+    println!("  \x1b[2m↑↓/j/k: navigate   Enter: select   1-3/q: quick select\x1b[0m");
     println!();
     let _ = std::io::stdout().flush();
 }

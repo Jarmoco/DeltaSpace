@@ -11,3 +11,4 @@ dist/
 *.msi
 homebrew-deltaspace/
 CD.md
+nfpm.yaml
