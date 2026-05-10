@@ -213,7 +213,10 @@ pub fn cmd_explore(baseline_index: usize, mut comparison_index: usize) {
                 }
                 "d" | "D" if !rows.is_empty() => {
                     let selected_path = rows[cursor_index].0;
-                    if !pending_deletions.iter().any(|p| p == selected_path) {
+                    if let Some(pos) = pending_deletions.iter().position(|p| p == selected_path)
+                    {
+                        pending_deletions.remove(pos);
+                    } else {
                         pending_deletions.push(selected_path.to_string());
                     }
                 }
