@@ -32,7 +32,7 @@ use std::io::Write;
 
 const MENU_ITEMS: &[&str] = &[
     "Scan filesystem → snapshot",
-    "Compare snapshots (interactive)",
+    "Compare snapshots",
     "Prune snapshots",
     "Quit",
 ];

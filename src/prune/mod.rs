@@ -7,6 +7,7 @@
 
 mod model;
 mod render;
+mod smart;
 
 use std::{
     fs,
@@ -19,7 +20,7 @@ use render::render_prune;
 
 /* --- Confirmation --- */
 
-fn run_deletion_confirmation(entries: &[SnapEntry]) -> bool {
+pub(crate) fn run_deletion_confirmation(entries: &[SnapEntry]) -> bool {
     let marked: Vec<&SnapEntry> = entries.iter().filter(|e| e.marked).collect();
     let marked_count = marked.len();
 
@@ -87,7 +88,7 @@ fn run_deletion_confirmation(entries: &[SnapEntry]) -> bool {
 
 /* --- Execution --- */
 
-fn execute_deletions(entries: &mut [SnapEntry]) -> (u32, u32) {
+pub(crate) fn execute_deletions(entries: &mut [SnapEntry]) -> (u32, u32) {
     let (mut deleted, mut failed) = (0u32, 0u32);
     for entry in entries.iter_mut().filter(|e| e.marked) {
         match fs::remove_file(&entry.path) {
@@ -103,11 +104,11 @@ fn execute_deletions(entries: &mut [SnapEntry]) -> (u32, u32) {
     (deleted, failed)
 }
 
-/* --- Main --- */
+/* --- Main ----------------------------------------------------------------- */
 
 pub fn cmd_prune() {
-    let files = crate::snapshot::cmd_list(false);
-    if files.is_empty() {
+    let has_snapshots = !crate::snapshot::cmd_list(false).is_empty();
+    if !has_snapshots {
         println!(
             "No snapshots found in {}.",
             crate::constants::get_output_dir()
@@ -116,6 +117,26 @@ pub fn cmd_prune() {
         return;
     }
 
+    loop {
+        crate::terminal::clear();
+        println!();
+        println!("  Select your pruning method:\n");
+        println!("  [1] Smart pruning (recommended)");
+        println!("  [2] Manual pruning\n");
+        println!("  \x1b[2mq: go back\x1b[0m\n");
+        let _ = io::stdout().flush();
+
+        match crate::terminal::getch().as_str() {
+            "1" => smart::run_smart_mode(),
+            "2" => cmd_prune_manual(),
+            "q" | "Q" | "\x03" => break,
+            _ => {}
+        }
+    }
+}
+
+fn cmd_prune_manual() {
+    let files = crate::snapshot::cmd_list(false);
     let mut entries = group_snapshots(&files);
     let mut cursor = 0usize;
 
