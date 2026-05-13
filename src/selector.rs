@@ -123,7 +123,12 @@ pub fn select_snapshot_pair(files: &[String]) -> Option<(usize, usize)> {
         return None;
     }
 
-    let mut baseline_cursor = 0usize;
+    let (y, m, d, _, _) = crate::time::get_local_time();
+    let today_ymd = (y as i32, m, d);
+    let mut baseline_cursor = entries
+        .iter()
+        .position(|e| (e.year, e.month, e.day) == today_ymd)
+        .unwrap_or(0);
     let mut comparison_cursor = 0usize;
     let mut selection_phase: u8 = 0;
     let mut selected_baseline_index: Option<usize> = None;
