@@ -26,7 +26,7 @@ pub fn render_prune(entries: &[SnapEntry], cursor: usize) {
 
     for (i, entry) in entries.iter().enumerate() {
         let ym = (entry.year, entry.month);
-        let week = week_of_month(entry.day);
+        let week = week_of_month(entry.year, entry.month, entry.day);
 
         if Some(ym) != last_ym {
             if last_ym.is_some() {

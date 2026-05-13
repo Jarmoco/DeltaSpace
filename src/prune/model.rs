@@ -29,8 +29,16 @@ pub fn parse_snapshot_date(path: &str) -> Option<(i32, u32, u32, u32, u32)> {
     ))
 }
 
-pub fn week_of_month(day: u32) -> u32 {
-    (day - 1) / 7 + 1
+fn day_of_week_mon(year: i32, month: u32, day: u32) -> u32 {
+    let t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+    let y = if month < 3 { year - 1 } else { year };
+    let dow_sun = ((y + y / 4 - y / 100 + y / 400 + t[(month - 1) as usize] + day as i32) % 7 + 7) % 7;
+    ((dow_sun + 6) % 7) as u32
+}
+
+pub fn week_of_month(year: i32, month: u32, day: u32) -> u32 {
+    let first_dow = day_of_week_mon(year, month, 1);
+    (day - 1 + first_dow) / 7 + 1
 }
 
 pub fn month_name(m: u32) -> &'static str {

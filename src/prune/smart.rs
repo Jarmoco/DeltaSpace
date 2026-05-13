@@ -6,49 +6,72 @@
 use std::io::{self, Write};
 
 use super::{group_snapshots, SnapEntry};
+use super::model::week_of_month;
 
 /* --- Types ----------------------------------------------------------------- */
 
 pub enum SmartMethod {
+    DayFirstLast,
     DayLast,
     DayFirst,
-    DayFirstLast,
+    WeekFirstLast,
+    WeekLast,
+    WeekFirst,
 }
 
 impl SmartMethod {
     pub fn all() -> &'static [SmartMethod] {
-        &[SmartMethod::DayLast, SmartMethod::DayFirst, SmartMethod::DayFirstLast]
+        &[
+            SmartMethod::DayFirstLast,
+            SmartMethod::DayLast,
+            SmartMethod::DayFirst,
+            SmartMethod::WeekFirstLast,
+            SmartMethod::WeekLast,
+            SmartMethod::WeekFirst,
+        ]
     }
 
     pub fn name(&self) -> &'static str {
         match self {
+            SmartMethod::DayFirstLast => "day-first-last",
             SmartMethod::DayLast => "day-last",
             SmartMethod::DayFirst => "day-first",
-            SmartMethod::DayFirstLast => "day-first-last",
+            SmartMethod::WeekFirstLast => "week-first-last",
+            SmartMethod::WeekLast => "week-last",
+            SmartMethod::WeekFirst => "week-first",
         }
     }
 
     pub fn display_name(&self) -> &'static str {
         match self {
+            SmartMethod::DayFirstLast => "Day-First-Last",
             SmartMethod::DayLast => "Day-Last",
             SmartMethod::DayFirst => "Day-First",
-            SmartMethod::DayFirstLast => "Day-First-Last",
+            SmartMethod::WeekFirstLast => "Week-First-Last",
+            SmartMethod::WeekLast => "Week-Last",
+            SmartMethod::WeekFirst => "Week-First",
         }
     }
 
     pub fn description(&self) -> &'static str {
         match self {
+            SmartMethod::DayFirstLast => "Keep first and last snapshot per day",
             SmartMethod::DayLast => "Keep only the last snapshot of each day",
             SmartMethod::DayFirst => "Keep only the first snapshot of each day",
-            SmartMethod::DayFirstLast => "Keep first and last snapshot per day",
+            SmartMethod::WeekFirstLast => "Keep snapshots of first and last day of each week",
+            SmartMethod::WeekLast => "Keep only the last snapshot of each week",
+            SmartMethod::WeekFirst => "Keep only the first snapshot of each week",
         }
     }
 
     pub fn from_name(s: &str) -> Option<SmartMethod> {
         match s {
+            "day-first-last" => Some(SmartMethod::DayFirstLast),
             "day-last" => Some(SmartMethod::DayLast),
             "day-first" => Some(SmartMethod::DayFirst),
-            "day-first-last" => Some(SmartMethod::DayFirstLast),
+            "week-first-last" => Some(SmartMethod::WeekFirstLast),
+            "week-last" => Some(SmartMethod::WeekLast),
+            "week-first" => Some(SmartMethod::WeekFirst),
             _ => None,
         }
     }
@@ -65,36 +88,55 @@ pub fn apply_smart_strategy(entries: &mut [SnapEntry], method: SmartMethod) {
         return;
     }
 
-    let mut day_start = 0usize;
+    let use_week = matches!(
+        method,
+        SmartMethod::WeekFirstLast | SmartMethod::WeekLast | SmartMethod::WeekFirst
+    );
+
+    let mut group_start = 0usize;
     for i in 1..=entries.len() {
         let last_entry = i == entries.len();
-        let different_day = !last_entry
-            && (entries[i].year != entries[i - 1].year
-                || entries[i].month != entries[i - 1].month
-                || entries[i].day != entries[i - 1].day);
+        let different_group = !last_entry
+            && if use_week {
+                entries[i].year != entries[i - 1].year
+                    || entries[i].month != entries[i - 1].month
+                    || week_of_month(
+                        entries[i].year,
+                        entries[i].month,
+                        entries[i].day,
+                    ) != week_of_month(
+                        entries[i - 1].year,
+                        entries[i - 1].month,
+                        entries[i - 1].day,
+                    )
+            } else {
+                entries[i].year != entries[i - 1].year
+                    || entries[i].month != entries[i - 1].month
+                    || entries[i].day != entries[i - 1].day
+            };
 
-        if last_entry || different_day {
-            let day_end = i - 1;
+        if last_entry || different_group {
+            let group_end = i - 1;
             match method {
-                SmartMethod::DayLast => {
-                    for j in day_start..day_end {
-                        entries[j].marked = true;
-                    }
-                }
-                SmartMethod::DayFirst => {
-                    for j in day_start + 1..=day_end {
-                        entries[j].marked = true;
-                    }
-                }
-                SmartMethod::DayFirstLast => {
-                    if day_end - day_start >= 1 {
-                        for j in day_start + 1..day_end {
+                SmartMethod::DayFirstLast | SmartMethod::WeekFirstLast => {
+                    if group_end - group_start >= 1 {
+                        for j in group_start + 1..group_end {
                             entries[j].marked = true;
                         }
                     }
                 }
+                SmartMethod::DayLast | SmartMethod::WeekLast => {
+                    for j in group_start..group_end {
+                        entries[j].marked = true;
+                    }
+                }
+                SmartMethod::DayFirst | SmartMethod::WeekFirst => {
+                    for j in group_start + 1..=group_end {
+                        entries[j].marked = true;
+                    }
+                }
             }
-            day_start = i;
+            group_start = i;
         }
     }
 }
@@ -133,14 +175,20 @@ fn select_method() -> Option<SmartMethod> {
             "\x1b[B" | "j" => {
                 cursor = (cursor + 1).min(methods.len() - 1);
             }
-            "1" => return Some(SmartMethod::DayLast),
-            "2" => return Some(SmartMethod::DayFirst),
-            "3" => return Some(SmartMethod::DayFirstLast),
+            "1" => return Some(SmartMethod::DayFirstLast),
+            "2" => return Some(SmartMethod::DayLast),
+            "3" => return Some(SmartMethod::DayFirst),
+            "4" => return Some(SmartMethod::WeekFirstLast),
+            "5" => return Some(SmartMethod::WeekLast),
+            "6" => return Some(SmartMethod::WeekFirst),
             "\r" | "\n" => {
                 return match cursor {
-                    0 => Some(SmartMethod::DayLast),
-                    1 => Some(SmartMethod::DayFirst),
-                    2 => Some(SmartMethod::DayFirstLast),
+                    0 => Some(SmartMethod::DayFirstLast),
+                    1 => Some(SmartMethod::DayLast),
+                    2 => Some(SmartMethod::DayFirst),
+                    3 => Some(SmartMethod::WeekFirstLast),
+                    4 => Some(SmartMethod::WeekLast),
+                    5 => Some(SmartMethod::WeekFirst),
                     _ => None,
                 };
             }
