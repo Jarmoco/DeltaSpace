@@ -22,13 +22,72 @@ pub fn render_selector(
     selected_baseline_index: Option<usize>,
 ) {
     terminal::clear();
+    let h = terminal::get_height();
 
+    let today_ymd = {
+        let t = crate::time::get_local_time();
+        (t.0 as i32, t.1, t.2)
+    };
+    let baseline_idx = selected_baseline_index.unwrap_or(usize::MAX);
+
+    /* --- Collect entry lines --- */
+    let mut lines: Vec<String> = Vec::new();
+
+    for (i, entry) in entries.iter().enumerate() {
+        let is_today = (entry.year, entry.month, entry.day) == today_ymd;
+        let label = prune::format_display_compact(entry);
+        let label_padded = format!("{:<w$}", label, w = CELL_W);
+
+        let is_left_cursor = selection_phase == 0 && i == baseline_cursor;
+        let is_left_selected = selection_phase >= 1 && Some(i) == selected_baseline_index;
+        let is_right_cursor = selection_phase == 1 && i == comparison_cursor;
+
+        let left = if is_left_cursor {
+            format!("\x1b[7m ▸ {}\x1b[0m", label_padded)
+        } else if is_left_selected || selection_phase == 0 {
+            if is_today {
+                format!("\x1b[32m   {}\x1b[0m", label_padded)
+            } else {
+                format!("   {}", label_padded)
+            }
+        } else {
+            if is_today {
+                format!("\x1b[32m\x1b[2m   {}\x1b[0m", label_padded)
+            } else {
+                format!("\x1b[2m   {}\x1b[0m", label_padded)
+            }
+        };
+
+        let right = if is_right_cursor {
+            format!("\x1b[7m ▸ {}\x1b[0m", label_padded)
+        } else if selection_phase == 0 || (selection_phase >= 1 && i <= baseline_idx) {
+            if is_today {
+                format!("\x1b[32m\x1b[2m   {}\x1b[0m", label_padded)
+            } else {
+                format!("\x1b[2m   {}\x1b[0m", label_padded)
+            }
+        } else {
+            if is_today {
+                format!("\x1b[32m   {}\x1b[0m", label_padded)
+            } else {
+                format!("   {}", label_padded)
+            }
+        };
+
+        lines.push(format!("  {}{}{}", left, " ".repeat(GAP), right));
+    }
+
+    const HEADER: usize = 6;
+    let body_total = lines.len();
+    let body_avail = h.saturating_sub(HEADER);
+
+    /* --- Render fixed header --- */
     println!();
     println!("  DeltaSpace — Select snapshots to compare");
     if selection_phase == 0 {
-        println!("  j/k/arrows: navigate   Enter: select   q: cancel");
+        println!("  \x1b[2mj/k/arrows: navigate   Enter: select   q: cancel\x1b[0m");
     } else {
-        println!("  j/k/arrows: navigate   Enter: select   ← back   q: cancel");
+        println!("  \x1b[2mj/k/arrows: navigate   Enter: select   ← back   q: cancel\x1b[0m");
     }
     println!();
     println!(
@@ -44,75 +103,71 @@ pub fn render_selector(
         "─".repeat(COL_W)
     );
 
-    let max_visible = terminal::get_height().saturating_sub(8);
-    let scroll_offset = if entries.len() > max_visible {
-        let active_cursor = if selection_phase == 0 {
-            baseline_cursor
-        } else {
-            comparison_cursor
-        };
-        if active_cursor >= max_visible {
-            active_cursor - max_visible + 1
-        } else {
-            0
+    /* --- Body --- */
+    if body_total <= body_avail {
+        for line in &lines {
+            println!("{line}");
         }
+        let _ = std::io::stdout().flush();
+        return;
+    }
+
+    let active_cursor = if selection_phase == 0 {
+        baseline_cursor
     } else {
-        0
+        comparison_cursor
     };
 
-    let mut last_day: Option<(i32, u32, u32)> = None;
+    let third = body_avail / 3;
+    let (show_top, show_bot) = if active_cursor <= third {
+        (false, true)
+    } else if active_cursor >= body_total.saturating_sub(third) {
+        (true, false)
+    } else {
+        (true, true)
+    };
 
-    let mut i = scroll_offset;
-    let end = (scroll_offset + max_visible).min(entries.len());
-    while i < end {
-        let entry = &entries[i];
+    let content =
+        body_avail.saturating_sub(show_top as usize + show_bot as usize).max(1);
 
-        let current_day = (entry.year, entry.month, entry.day);
-        if last_day.is_some() && last_day != Some(current_day) {
-            println!();
-        }
-        last_day = Some(current_day);
+    let mut top = active_cursor.saturating_sub(content / 3);
 
-        let label = prune::format_display_compact(entry);
-
-        let is_left_cursor = selection_phase == 0 && i == baseline_cursor;
-        let is_left_selected = selection_phase >= 1 && Some(i) == selected_baseline_index;
-        let is_right_cursor = selection_phase == 1 && i == comparison_cursor;
-
-        let left = if is_left_cursor {
-            format!("\x1b[7m ▸ {:<w$}\x1b[0m", label, w = CELL_W)
-        } else if is_left_selected {
-            format!("   {:<w$}", label, w = CELL_W)
-        } else if selection_phase >= 1 {
-            format!("   \x1b[2m{:<w$}\x1b[0m", label, w = CELL_W)
-        } else {
-            format!("   {:<w$}", label, w = CELL_W)
-        };
-
-        let right = if is_right_cursor {
-            format!("\x1b[7m ▸ {:<w$}\x1b[0m", label, w = CELL_W)
-        } else if selection_phase == 0 {
-            format!("   \x1b[2m{:<w$}\x1b[0m", label, w = CELL_W)
-        } else {
-            format!("   {:<w$}", label, w = CELL_W)
-        };
-
-        println!("  {}{}{}", left, " ".repeat(GAP), right);
-
-        i += 1;
+    if show_top && top == 0 {
+        top = 1;
+    }
+    if show_bot && top + content >= body_total {
+        top = body_total.saturating_sub(content + 1);
     }
 
-    if entries.len() > max_visible {
-        println!();
-        println!(
-            "  \x1b[2m  Showing {}–{} of {}\x1b[0m",
-            scroll_offset + 1,
-            entries.len().min(scroll_offset + max_visible),
-            entries.len()
-        );
+    if active_cursor < top {
+        top = active_cursor;
+    } else if active_cursor >= top + content {
+        top = (active_cursor + 1).saturating_sub(content);
     }
 
-    println!();
+    if show_top && top == 0 {
+        top = 1;
+    }
+    if top + content > body_total {
+        top = body_total.saturating_sub(content);
+    }
+
+    let bot = top + content;
+
+    if show_top {
+        let n = top;
+        let s = if n == 1 { "" } else { "s" };
+        println!("  \x1b[2m\u{2191} {} line{} more\x1b[0m", n, s);
+    }
+    for line in &lines[top..bot] {
+        println!("{line}");
+    }
+    if show_bot {
+        let n = body_total - bot;
+        let s = if n == 1 { "" } else { "s" };
+        println!("  \x1b[2m\u{2193} {} line{} more\x1b[0m", n, s);
+    }
+
     let _ = std::io::stdout().flush();
 }
 
@@ -149,6 +204,10 @@ pub fn select_snapshot_pair(files: &[String]) -> Option<(usize, usize)> {
                     baseline_cursor = baseline_cursor.saturating_sub(1);
                 } else {
                     comparison_cursor = comparison_cursor.saturating_sub(1);
+                    let min_allowed = selected_baseline_index.unwrap_or(0) + 1;
+                    if comparison_cursor < min_allowed {
+                        comparison_cursor = min_allowed.min(n.saturating_sub(1));
+                    }
                 }
             }
             "\x1b[B" | "j" => {
@@ -156,19 +215,20 @@ pub fn select_snapshot_pair(files: &[String]) -> Option<(usize, usize)> {
                     baseline_cursor = (baseline_cursor + 1).min(n.saturating_sub(1));
                 } else {
                     comparison_cursor = (comparison_cursor + 1).min(n.saturating_sub(1));
+                    let min_allowed = selected_baseline_index.unwrap_or(0) + 1;
+                    if comparison_cursor < min_allowed {
+                        comparison_cursor = min_allowed.min(n.saturating_sub(1));
+                    }
                 }
             }
             "\r" | "\n" => {
                 if selection_phase == 0 {
+                    if baseline_cursor + 1 >= n {
+                        continue;
+                    }
                     selected_baseline_index = Some(baseline_cursor);
                     selection_phase = 1;
-                    comparison_cursor = if baseline_cursor + 1 < n {
-                        baseline_cursor + 1
-                    } else if baseline_cursor > 0 {
-                        baseline_cursor - 1
-                    } else {
-                        0
-                    };
+                    comparison_cursor = baseline_cursor + 1;
                 } else {
                     let baseline_index = selected_baseline_index.unwrap();
                     let comparison_index = comparison_cursor;
